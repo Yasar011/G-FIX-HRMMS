@@ -13,3 +13,13 @@ export async function uploadProjectFile(
   await uploadBytes(fileRef, file);
   return getDownloadURL(fileRef);
 }
+
+export async function uploadSiteFile(
+  folder: "hero" | "timeline" | "resume",
+  file: File
+): Promise<string> {
+  const path = `site/${folder}/${Date.now()}-${file.name}`;
+  const fileRef = storageRef(storage, path);
+  await uploadBytes(fileRef, file);
+  return getDownloadURL(fileRef);
+}
