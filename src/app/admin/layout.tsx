@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ADMIN_NAV } from "@/lib/admin-nav";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const { user, role, loading, signOut } = useAuth();
+  const { user, role, loading, error, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -21,6 +21,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
         Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+        <h1 className="text-lg font-semibold text-red-600">
+          Couldn&apos;t load account role
+        </h1>
+        <p className="max-w-md text-sm text-zinc-500">{error}</p>
+        <button
+          onClick={() => signOut()}
+          className="mt-4 text-sm font-medium text-zinc-700 underline dark:text-zinc-300"
+        >
+          Sign out
+        </button>
       </div>
     );
   }

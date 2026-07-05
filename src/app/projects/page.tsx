@@ -8,14 +8,21 @@ import { subscribeProjects } from "@/lib/projects";
 export default function PublicProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeProjects((list) => {
-      setProjects(
-        list.filter((p) => p.published).sort((a, b) => a.priority - b.priority)
-      );
-      setLoading(false);
-    });
+    const unsubscribe = subscribeProjects(
+      (list) => {
+        setProjects(
+          list.filter((p) => p.published).sort((a, b) => a.priority - b.priority)
+        );
+        setLoading(false);
+      },
+      () => {
+        setError("Could not load projects from the database.");
+        setLoading(false);
+      }
+    );
     return unsubscribe;
   }, []);
 
@@ -25,7 +32,9 @@ export default function PublicProjectsPage() {
         Projects
       </h1>
 
-      {loading ? (
+      {error ? (
+        <p className="mt-4 text-sm text-red-600">{error}</p>
+      ) : loading ? (
         <p className="mt-4 text-sm text-zinc-500">Loading...</p>
       ) : projects.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500">

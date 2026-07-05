@@ -23,6 +23,7 @@ type AuthContextValue = {
   user: User | null;
   role: Role | null;
   loading: boolean;
+  error: string | null;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -52,10 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
+      setError(null);
       if (!firebaseUser) {
         setUser(null);
         setRole(null);
@@ -63,9 +66,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setUser(firebaseUser);
-      const resolvedRole = await ensureUserRecord(firebaseUser);
-      setRole(resolvedRole);
-      setLoading(false);
+      try {
+        const resolvedRole = await ensureUserRecord(firebaseUser);
+        setRole(resolvedRole);
+      } catch {
+        setRole(null);
+        setError(
+          "Could not load your account role from the database. This usually means the Realtime Database security rules haven't been published in the Firebase console yet."
+        );
+      } finally {
+        setLoading(false);
+      }
     });
     return unsubscribe;
   }, []);
@@ -74,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     role,
     loading,
+    error,
     signInWithEmail: async (email, password) => {
       await signInWithEmailAndPassword(auth, email, password);
     },

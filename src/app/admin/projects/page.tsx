@@ -12,12 +12,19 @@ import {
 export default function ProjectsAdminPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeProjects((list) => {
-      setProjects([...list].sort((a, b) => a.priority - b.priority));
-      setLoading(false);
-    });
+    const unsubscribe = subscribeProjects(
+      (list) => {
+        setProjects([...list].sort((a, b) => a.priority - b.priority));
+        setLoading(false);
+      },
+      () => {
+        setError("Could not load projects from the database.");
+        setLoading(false);
+      }
+    );
     return unsubscribe;
   }, []);
 
@@ -48,7 +55,9 @@ export default function ProjectsAdminPage() {
         </Link>
       </div>
 
-      {loading ? (
+      {error ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
       ) : projects.length === 0 ? (
         <p className="text-sm text-zinc-500">

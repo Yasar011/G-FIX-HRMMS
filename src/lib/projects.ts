@@ -72,15 +72,20 @@ export async function updateProjectFields(
 }
 
 export function subscribeProjects(
-  callback: (projects: Project[]) => void
+  callback: (projects: Project[]) => void,
+  onError?: (error: Error) => void
 ): () => void {
-  return onValue(ref(db, PROJECTS_PATH), (snapshot) => {
-    const value = snapshot.val() as Record<string, Omit<Project, "id">> | null;
-    const list = value
-      ? Object.entries(value).map(([id, data]) => ({ id, ...data }))
-      : [];
-    callback(list);
-  });
+  return onValue(
+    ref(db, PROJECTS_PATH),
+    (snapshot) => {
+      const value = snapshot.val() as Record<string, Omit<Project, "id">> | null;
+      const list = value
+        ? Object.entries(value).map(([id, data]) => ({ id, ...data }))
+        : [];
+      callback(list);
+    },
+    (error) => onError?.(error)
+  );
 }
 
 export async function getProject(id: string): Promise<Project | null> {
