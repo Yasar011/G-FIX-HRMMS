@@ -8,14 +8,16 @@
  *
  * Excel columns: Department | Budget  (optional: Section)
  */
-import { pageWatch, dbUpdate, dbSet, dbPush, read } from "../lib/store.js";
-import { can, currentUser } from "../lib/auth.js";
+import { pageWatch, dbUpdate, dbSet, read } from "../lib/store.js";
+import { can } from "../lib/auth.js";
 import { toast, modal, badge, progressBar, emptyState } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
+import { dropZone } from "../components/uploader.js";
+import { readWorkbook, parseBudgetRows, importBudget } from "../lib/importers.js";
 import { notify } from "../lib/notify.js";
-import { el, ym, fmtNum, fmtPct, uniq, groupBy } from "../lib/utils.js";
+import { el, ym, fmtNum, fmtPct, uniq } from "../lib/utils.js";
 import { empList, activeEmps, budgetStats, budgetSummary } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", brand: "#6366f1", violet: "#a78bfa" };
@@ -169,69 +171,48 @@ export async function render(root) {
     toast(`Copied budget from ${prev}`, "ok");
   }
 
-  /* ---------- Excel upload ---------- */
+  /* ---------- Excel upload (delegates to shared importer) ---------- */
   function openUpload() {
-    const fileInput = el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden" });
-    const zone = el("div", { class: "upload-zone", onclick: () => fileInput.click() },
-      el("div", { class: "big" }, "📥"),
-      el("p", {}, el("b", {}, "Click to choose"), " or drop an Excel file"),
-      el("small", {}, "Columns: Department · Budget · (optional) Section"));
     const preview = el("div", { style: { marginTop: "12px" } });
     let parsed = null;
     let uploadName = "";
 
-    fileInput.addEventListener("change", () => fileInput.files[0] && handle(fileInput.files[0]));
-    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
-    zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
-    zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("drag"); if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]); });
+    const zone = dropZone({
+      accept: ".xlsx,.xls,.csv",
+      hint: "Columns: Department · Budget · (optional) Section",
+      onFile: async (file) => {
+        try {
+          uploadName = file.name;
+          const raw = await readWorkbook(file);
+          const res = parseBudgetRows(raw);
+          parsed = res.parsed;
+          preview.replaceChildren(el("div", { class: "card", style: { padding: "12px 16px" } },
+            el("p", { html: `<b>${escB(file.name)}</b> — ${res.deptCount} departments, total budget <b>${fmtNum(res.totalBudget)}</b>` })));
+        } catch (err) { console.error(err); toast("Could not read that file", "err"); }
+      },
+    });
 
     modal({
       title: `Upload Budget — ${month}`,
       width: "620px",
-      body: el("div", {}, zone, fileInput, preview),
+      body: el("div", {}, zone, preview),
       actions: [
         { label: "Cancel", class: "btn-ghost", onClick: () => {} },
         {
           label: "Import", class: "btn-primary",
           onClick: async (e, close) => {
             if (!parsed || !Object.keys(parsed).length) { toast("Choose a file first", "warn"); return true; }
-            await dbUpdate(`budget/${month}`, parsed);
-            notify("budget", "Budget uploaded", `${Object.keys(parsed).length} departments for ${month}`);
-            await dbPush("uploads", {
-              type: "budget", file: uploadName || "budget.xlsx",
-              rows: Object.keys(parsed).length, info: `${Object.keys(parsed).length} departments`,
-              range: month, by: currentUser?.name || "—", ts: Date.now(),
-            });
-            toast("Budget imported", "ok");
+            try {
+              await importBudget(month, parsed, uploadName);
+              toast("Budget imported", "ok");
+            } catch (err) { console.error(err); toast("Import failed — check your permissions", "err"); }
             close();
           },
         },
       ],
     });
-
-    async function handle(file) {
-      try {
-        uploadName = file.name;
-        const wb = XLSX.read(await file.arrayBuffer());
-        const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
-        parsed = {};
-        for (const row of raw) {
-          const norm = {};
-          for (const [k, v] of Object.entries(row)) norm[String(k).toLowerCase().replace(/[^a-z]/g, "")] = v;
-          const dept = String(norm.department || norm.dept || "").trim();
-          const total = Number(norm.budget ?? norm.headcount ?? norm.total);
-          const section = String(norm.section || "").trim();
-          if (!dept || isNaN(total)) continue;
-          if (!parsed[dept]) parsed[dept] = { total: 0 };
-          if (section) {
-            parsed[dept].sections = parsed[dept].sections || {};
-            parsed[dept].sections[section] = (parsed[dept].sections[section] || 0) + total;
-            parsed[dept].total += total;
-          } else parsed[dept].total = total;
-        }
-        preview.replaceChildren(el("div", { class: "card", style: { padding: "12px 16px" } },
-          el("p", { html: `<b>${file.name}</b> — ${Object.keys(parsed).length} departments, total budget <b>${fmtNum(Object.values(parsed).reduce((s, d) => s + d.total, 0))}</b>` })));
-      } catch (err) { console.error(err); toast("Could not read that file", "err"); }
-    }
   }
 }
+
+/** Minimal escaper for the upload preview filename. */
+function escB(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }

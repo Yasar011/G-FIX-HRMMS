@@ -18,6 +18,7 @@ import { track } from "./lib/firebase.js";
 export const PAGES = [
   { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, mod: () => import("./pages/dashboard.js") },
   { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, mod: () => import("./pages/attendance.js") },
+  { id: "uploads", title: "Data Upload", icon: "⬆️", cap: "upload_attendance", mod: () => import("./pages/uploads.js") },
   { id: "employees", title: "Employees", icon: "👥", cap: null, mod: () => import("./pages/employees.js") },
   { id: "departments", title: "Departments", icon: "🏭", cap: null, mod: () => import("./pages/departments.js") },
   { id: "budget", title: "Budget", icon: "💰", cap: null, mod: () => import("./pages/budget.js") },

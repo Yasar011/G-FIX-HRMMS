@@ -13,38 +13,20 @@
  * Half Day, Work From Home, Holiday). In/Out times are used to derive working
  * minutes, late and early-out flags when Status is absent.
  */
-import { pageWatch, dbUpdate, dbPush, getCached, read } from "../lib/store.js";
-import { can, currentUser } from "../lib/auth.js";
+import { pageWatch } from "../lib/store.js";
+import { can } from "../lib/auth.js";
 import { toast, modal, badge, statusTone, emptyState } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { filterBar, allOptions } from "../components/filters.js";
 import { kpiGrid } from "../components/kpi.js";
-import { notify } from "../lib/notify.js";
+import { dropZone } from "../components/uploader.js";
+import { readWorkbook, parseAttendanceRows, importAttendance } from "../lib/importers.js";
 import {
-  el, ym, today, fmtDate, fmtNum, fmtPct, hmToMin, minToHm, uniq, ymd, esc, toList, timeAgo,
+  el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo,
 } from "../lib/utils.js";
 import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
-import { track } from "../lib/firebase.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1" };
-
-/* Normalized header names → canonical field. */
-const HEADER_MAP = {
-  empid: "empId", employeeid: "empId", id: "empId", epf: "empId", "emp no": "empId", empno: "empId",
-  name: "name", employeename: "name",
-  date: "date", attendancedate: "date",
-  status: "status", attendance: "status",
-  in: "in", intime: "in", timein: "in", checkin: "in",
-  out: "out", outtime: "out", timeout: "out", checkout: "out",
-  shift: "shift",
-  ot: "otHours", othours: "otHours", overtime: "otHours",
-};
-
-const STATUS_ALIASES = {
-  p: "P", present: "P", a: "A", absent: "A", l: "L", leave: "L",
-  hd: "HD", halfday: "HD", "half day": "HD", wfh: "WFH", "work from home": "WFH",
-  h: "H", holiday: "H", off: "H", lt: "P", late: "P",
-};
 
 export async function render(root) {
   let employees = [];
@@ -273,135 +255,48 @@ export async function render(root) {
   const miniStat = (label, value) => el("div", { class: "card", style: { padding: "10px 14px" } },
     el("small", { class: "muted" }, label), el("div", { style: { fontSize: "18px", fontWeight: "700" } }, String(value)));
 
-  /* ---------- Excel upload ---------- */
+  /* ---------- Excel upload (delegates to shared importer) ---------- */
   function openUpload() {
-    const fileInput = el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden" });
-    const zone = el("div", { class: "upload-zone", onclick: () => fileInput.click() },
-      el("div", { class: "big" }, "📥"),
-      el("p", {}, el("b", {}, "Click to choose"), " or drag & drop an Excel/CSV file"),
-      el("small", {}, "Columns: EmpID · Name · Date · Status · In · Out · Shift · OT"));
     const preview = el("div", { style: { marginTop: "14px" } });
     let parsed = null;
 
-    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
-    zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
-    zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("drag"); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
-    fileInput.addEventListener("change", () => fileInput.files[0] && handleFile(fileInput.files[0]));
+    const zone = dropZone({
+      accept: ".xlsx,.xls,.csv",
+      hint: "Columns: EmpID · Name · Date · Status · In · Out · Shift · OT",
+      onFile: async (file) => {
+        try {
+          const raw = await readWorkbook(file);
+          parsed = parseAttendanceRows(raw, settings);
+          parsed.fileName = file.name;
+          preview.replaceChildren(el("div", { class: "card", style: { padding: "12px 16px" } },
+            el("p", { html: `<b>${esc2(file.name)}</b> — ${parsed.records.length} valid rows`
+              + ` across <b>${parsed.dates.size}</b> date(s), <b>${parsed.empIds.size}</b> employee(s)`
+              + (parsed.skipped ? ` · <span class="text-warn">${parsed.skipped} rows skipped</span>` : "") })));
+        } catch (err) { console.error(err); toast("Could not read that file", "err"); }
+      },
+    });
 
-    const m = modal({
+    modal({
       title: "Upload Attendance",
       width: "680px",
-      body: el("div", {}, zone, fileInput, preview),
+      body: el("div", {}, zone, preview),
       actions: [
         { label: "Cancel", class: "btn-ghost", onClick: () => {} },
         {
           label: "Import to Firebase", class: "btn-primary",
           onClick: async (e, close) => {
             if (!parsed?.records.length) { toast("Choose a file first", "warn"); return true; }
-            await importRecords(parsed);
+            try {
+              const n = await importAttendance(parsed, { employees, settings });
+              toast(`Imported ${n} attendance records`, "ok");
+            } catch (err) { console.error(err); toast("Import failed — check your permissions", "err"); }
             close();
           },
         },
       ],
     });
-
-    async function handleFile(file) {
-      try {
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { cellDates: true });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const raw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-        parsed = parseRows(raw);
-        parsed.fileName = file.name;
-        preview.replaceChildren(
-          el("div", { class: "card", style: { padding: "12px 16px" } },
-            el("p", { html: `<b>${file.name}</b> — ${parsed.records.length} valid rows` +
-              ` across <b>${parsed.dates.size}</b> date(s), <b>${parsed.empIds.size}</b> employee(s)` +
-              (parsed.skipped ? ` · <span class="text-warn">${parsed.skipped} rows skipped</span>` : "") }),
-            parsed.errors.length ? el("p", { class: "text-bad", style: { fontSize: "12px" } }, parsed.errors.slice(0, 3).join(" · ")) : null));
-      } catch (err) {
-        console.error(err);
-        toast("Could not read that file", "err");
-      }
-    }
-  }
-
-  /** Map raw sheet rows to normalized attendance records. */
-  function parseRows(raw) {
-    const out = { records: [], dates: new Set(), empIds: new Set(), skipped: 0, errors: [] };
-    for (const row of raw) {
-      const rec = {};
-      for (const [k, v] of Object.entries(row)) {
-        const key = HEADER_MAP[String(k).toLowerCase().replace(/[^a-z]/g, "")];
-        if (key) rec[key] = v;
-      }
-      const empId = String(rec.empId ?? "").trim();
-      let date = rec.date;
-      if (date instanceof Date) date = ymd(date);
-      else if (typeof date === "number") date = ymd(new Date(Math.round((date - 25569) * 86400e3))); // Excel serial
-      else date = String(date || "").trim().replace(/\//g, "-");
-      if (/^\d{2}-\d{2}-\d{4}$/.test(date)) date = date.split("-").reverse().join("-"); // DD-MM-YYYY
-
-      if (!empId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { out.skipped++; continue; }
-
-      const inMin = hmToMin(rec.in);
-      const outMin = hmToMin(rec.out);
-      let status = STATUS_ALIASES[String(rec.status || "").trim().toLowerCase()] || "";
-      if (!status) status = inMin != null ? "P" : "A"; // derive when missing
-
-      const std = settings.shiftStart || "08:00";
-      const stdEnd = settings.shiftEnd || "17:00";
-      const record = {
-        status,
-        in: rec.in ? String(rec.in).slice(0, 5) : null,
-        out: rec.out ? String(rec.out).slice(0, 5) : null,
-        shift: rec.shift ? String(rec.shift) : null,
-        otHours: Number(rec.otHours) || 0,
-        workMin: inMin != null && outMin != null ? Math.max(0, outMin - inMin) : 0,
-        late: status === "P" && inMin != null && inMin > hmToMin(std) + (Number(settings.graceMin) || 10),
-        earlyOut: status === "P" && outMin != null && outMin < hmToMin(stdEnd),
-        name: rec.name ? String(rec.name) : null,
-      };
-      Object.keys(record).forEach((k) => record[k] == null && delete record[k]);
-      out.records.push({ empId, date, record });
-      out.dates.add(date);
-      out.empIds.add(empId);
-    }
-    return out;
-  }
-
-  /** Batch-write parsed records with one multi-path update. */
-  async function importRecords(parsed) {
-    const updates = {};
-    for (const { empId, date, record } of parsed.records) {
-      updates[`${date}/${empId}`] = record;
-    }
-    try {
-      await dbUpdate("attendance", updates);
-      toast(`Imported ${parsed.records.length} attendance records`, "ok");
-      track("attendance_upload", { rows: parsed.records.length });
-      notify("attendance", "Attendance uploaded",
-        `${parsed.records.length} records for ${[...parsed.dates].sort().join(", ").slice(0, 80)}`);
-      // Record in the upload history log.
-      const sorted = [...parsed.dates].sort();
-      await dbPush("uploads", {
-        type: "attendance", file: parsed.fileName || "attendance.xlsx",
-        rows: parsed.records.length,
-        info: `${parsed.dates.size} day(s) · ${parsed.empIds.size} employee(s)`,
-        range: sorted.length ? `${sorted[0]} → ${sorted[sorted.length - 1]}` : "",
-        by: currentUser?.name || "—", ts: Date.now(),
-      });
-      // Threshold alert
-      const latest = [...parsed.dates].sort().pop();
-      const stats = dayStats({ ...(getCached("attendance")?.[latest] || {}) }, employees);
-      const threshold = Number(settings.attendanceThreshold) || 90;
-      if (stats.marked && stats.attendancePct < threshold) {
-        notify("alert", "Attendance below threshold",
-          `${fmtPct(stats.attendancePct)} on ${fmtDate(latest)} (target ${threshold}%)`);
-      }
-    } catch (e) {
-      console.error(e);
-      toast("Import failed — check your permissions", "err");
-    }
   }
 }
+
+/** Minimal escaper for the upload preview filename. */
+function esc2(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
