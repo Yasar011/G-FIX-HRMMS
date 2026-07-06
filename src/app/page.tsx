@@ -15,18 +15,23 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 function TopBar({ name }: { name: string }) {
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between px-6 py-4">
-      <span className="pointer-events-auto font-semibold text-white drop-shadow">{name}</span>
-      <div className="pointer-events-auto flex items-center gap-3">
+    <header className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between px-5 py-4 sm:px-8">
+      <span className="pointer-events-auto flex items-center gap-2 font-heading text-base font-semibold tracking-tight text-white drop-shadow">
+        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500 text-xs font-bold text-black">
+          Y
+        </span>
+        {name}
+      </span>
+      <div className="pointer-events-auto flex items-center gap-2">
         <Link
           href="/projects"
-          className="rounded-full border border-white/20 bg-black/30 px-3 py-1.5 text-sm text-white backdrop-blur hover:bg-black/50"
+          className="rounded-full border border-white/20 bg-black/30 px-3.5 py-1.5 text-sm font-medium text-white backdrop-blur transition hover:bg-black/50"
         >
           Projects
         </Link>
         <Link
           href="/login"
-          className="rounded-full bg-white px-3 py-1.5 text-sm text-zinc-900 hover:bg-zinc-200"
+          className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-200"
         >
           Admin
         </Link>

@@ -2,12 +2,12 @@ import { buildYbotSystemPrompt } from "@/lib/ybot-context";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-const XAI_API_URL = "https://api.x.ai/v1/chat/completions";
-const DEFAULT_MODEL = "grok-4";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+const DEFAULT_MODEL = "llama-3.3-70b-versatile";
 const MAX_MESSAGES = 20;
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GROK_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "Y-BOT is not configured yet." }), {
       status: 503,
@@ -29,14 +29,14 @@ export async function POST(request: Request) {
 
   const systemPrompt = await buildYbotSystemPrompt();
 
-  const upstream = await fetch(XAI_API_URL, {
+  const upstream = await fetch(GROQ_API_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.GROK_MODEL || DEFAULT_MODEL,
+      model: process.env.GROQ_MODEL || DEFAULT_MODEL,
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       stream: true,
       temperature: 0.6,
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   if (!upstream.ok || !upstream.body) {
     const errorText = await upstream.text().catch(() => "");
     return new Response(
-      JSON.stringify({ error: "Y-BOT couldn't reach Grok.", detail: errorText.slice(0, 300) }),
+      JSON.stringify({ error: "Y-BOT couldn't reach Groq.", detail: errorText.slice(0, 300) }),
       { status: 502, headers: { "Content-Type": "application/json" } }
     );
   }
