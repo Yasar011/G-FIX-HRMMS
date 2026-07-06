@@ -45,6 +45,18 @@ function Panel({ accent, kicker, title, children }: PanelProps) {
   );
 }
 
+function FullPageLink({ href, accent }: { href: string; accent: string }) {
+  return (
+    <Link
+      href={href}
+      className="mt-5 inline-flex items-center gap-1 text-sm font-medium transition hover:gap-2"
+      style={{ color: accent }}
+    >
+      View full page →
+    </Link>
+  );
+}
+
 function AccentButton({
   href,
   accent,
@@ -141,6 +153,7 @@ export function HrPanel({ content, accent }: { content: SiteContent; accent: str
           </div>
         ))}
       </div>
+      <FullPageLink href="/about" accent={accent} />
     </Panel>
   );
 }
@@ -222,6 +235,7 @@ export function CreativePanel({ photos, accent }: { photos: Photo[]; accent: str
           ))}
         </div>
       )}
+      {published.length > 0 && <FullPageLink href="/photography" accent={accent} />}
     </Panel>
   );
 }
@@ -260,6 +274,7 @@ export function QualityPanel({
           ))}
         </div>
       )}
+      {published.length > 0 && <FullPageLink href="/certificates" accent={accent} />}
     </Panel>
   );
 }
