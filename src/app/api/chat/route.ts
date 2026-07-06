@@ -1,4 +1,4 @@
-import { buildYbotSystemPrompt } from "@/lib/ybot-context";
+import { buildYbotSystemPrompt, getYbotModel } from "@/lib/ybot-context";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -27,7 +27,10 @@ export async function POST(request: Request) {
     });
   }
 
-  const systemPrompt = await buildYbotSystemPrompt();
+  const [systemPrompt, configuredModel] = await Promise.all([
+    buildYbotSystemPrompt(),
+    getYbotModel(),
+  ]);
 
   const upstream = await fetch(GROQ_API_URL, {
     method: "POST",
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.GROQ_MODEL || DEFAULT_MODEL,
+      model: process.env.GROQ_MODEL || configuredModel || DEFAULT_MODEL,
       messages: [{ role: "system", content: systemPrompt }, ...messages],
       stream: true,
       temperature: 0.6,

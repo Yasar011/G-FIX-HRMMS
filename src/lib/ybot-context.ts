@@ -1,5 +1,11 @@
 import { DEFAULT_SITE_CONTENT, type SiteContent } from "./site-content";
 import { DEFAULT_PROJECTS, type Project } from "./projects";
+import {
+  DEFAULT_YBOT_CONFIG,
+  DEFAULT_YBOT_KNOWLEDGE,
+  type YbotConfig,
+  type YbotKnowledge,
+} from "./settings";
 
 async function fetchJson<T>(path: string): Promise<T | null> {
   const base = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL;
@@ -13,11 +19,21 @@ async function fetchJson<T>(path: string): Promise<T | null> {
   }
 }
 
+export async function getYbotModel(): Promise<string> {
+  const config = await fetchJson<YbotConfig>("content/ybot/config");
+  return config?.model || DEFAULT_YBOT_CONFIG.model;
+}
+
 export async function buildYbotSystemPrompt(): Promise<string> {
-  const [siteRaw, projectsRaw] = await Promise.all([
+  const [siteRaw, projectsRaw, knowledgeRaw, configRaw] = await Promise.all([
     fetchJson<SiteContent>("content/site"),
     fetchJson<Record<string, Omit<Project, "id">>>("content/projects"),
+    fetchJson<YbotKnowledge>("content/ybot/knowledge"),
+    fetchJson<YbotConfig>("content/ybot/config"),
   ]);
+
+  const knowledge = knowledgeRaw?.facts ?? DEFAULT_YBOT_KNOWLEDGE.facts;
+  const extraInstructions = configRaw?.extraInstructions ?? DEFAULT_YBOT_CONFIG.extraInstructions;
 
   const site = siteRaw ?? DEFAULT_SITE_CONTENT;
   const projects = projectsRaw
@@ -35,6 +51,14 @@ export async function buildYbotSystemPrompt(): Promise<string> {
   const timelineLines = site.timeline
     .map((t) => `- ${t.role} at ${t.company} (${t.period}): ${t.description}`)
     .join("\n");
+
+  const knowledgeLines = knowledge.length
+    ? `\n# Additional facts\n${knowledge.map((f) => `- ${f}`).join("\n")}`
+    : "";
+
+  const extraSection = extraInstructions
+    ? `\n# Extra instructions\n${extraInstructions}`
+    : "";
 
   return `You are Y-BOT, the AI assistant embedded in ${site.heroName}'s portfolio website ("YASAR INDUSTRIES — The Digital Factory"). Answer questions about ${site.heroName} using only the information below. Be concise, friendly, and specific. Use Markdown formatting (headings, bold, bullet lists) where it helps readability. If asked something you don't have information about, say so honestly instead of inventing details — never fabricate projects, dates, or credentials that aren't listed here.
 
@@ -54,5 +78,5 @@ ${projectLines || "No published projects yet."}
 # Contact
 Email: ${site.contactEmail}
 ${site.githubUrl ? `GitHub: ${site.githubUrl}` : ""}
-${site.linkedinUrl ? `LinkedIn: ${site.linkedinUrl}` : ""}`;
+${site.linkedinUrl ? `LinkedIn: ${site.linkedinUrl}` : ""}${knowledgeLines}${extraSection}`;
 }

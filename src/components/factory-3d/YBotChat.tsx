@@ -4,17 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { YBotAvatar } from "./YBotAvatar";
+import {
+  DEFAULT_YBOT_CONFIG,
+  YBOT_CONFIG_PATH,
+  subscribeNode,
+  type YbotConfig,
+} from "@/lib/settings";
 
 type Message = { role: "user" | "assistant"; content: string };
 
 const ACCENT = "#a855f7";
-
-const SUGGESTED_QUESTIONS = [
-  "What projects have you built?",
-  "Tell me about GarmentFix",
-  "What's your apparel background?",
-  "What tech do you work with?",
-];
 
 const MARKDOWN_CLASSES =
   "text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:mb-0.5 [&_strong]:font-semibold [&_h1]:mt-2 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:mt-2 [&_h2]:text-sm [&_h2]:font-semibold [&_a]:font-medium [&_a]:underline [&_code]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs";
@@ -34,11 +33,20 @@ export function YBotChat() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggested, setSuggested] = useState<string[]>(DEFAULT_YBOT_CONFIG.suggestedQuestions);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  useEffect(
+    () =>
+      subscribeNode<YbotConfig>(YBOT_CONFIG_PATH, DEFAULT_YBOT_CONFIG, (config) => {
+        if (config.suggestedQuestions?.length) setSuggested(config.suggestedQuestions);
+      }),
+    []
+  );
 
   const lastAssistantEmpty =
     streaming && messages.at(-1)?.role === "assistant" && messages.at(-1)?.content === "";
@@ -121,7 +129,7 @@ export function YBotChat() {
               Hi! I&apos;m Y-BOT. Ask me anything about Yasar&apos;s projects, skills, or experience.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTED_QUESTIONS.map((q) => (
+              {suggested.map((q) => (
                 <button
                   key={q}
                   type="button"
