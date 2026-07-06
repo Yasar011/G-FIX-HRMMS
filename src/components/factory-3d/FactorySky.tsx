@@ -28,9 +28,9 @@ const FRAGMENT_SHADER = /* glsl */ `
 export function FactorySky() {
   const uniforms = useMemo(
     () => ({
-      topColor: { value: new THREE.Color("#0a1030") },
-      midColor: { value: new THREE.Color("#1c1440") },
-      bottomColor: { value: new THREE.Color("#05060a") },
+      topColor: { value: new THREE.Color("#1c2a5e") },
+      midColor: { value: new THREE.Color("#3a2f6e") },
+      bottomColor: { value: new THREE.Color("#120f24") },
     }),
     []
   );

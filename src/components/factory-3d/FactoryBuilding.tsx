@@ -28,7 +28,7 @@ function WindowGrid({ progressRef }: { progressRef: ProgressRef }) {
 
   useFrame(({ clock }) => {
     const progress = progressRef.current;
-    const base = THREE.MathUtils.smoothstep(progress, 0.22, 0.5);
+    const base = 0.35 + THREE.MathUtils.smoothstep(progress, 0.22, 0.5) * 1.1;
     const t = clock.getElapsedTime();
     materials.current.forEach((mat, i) => {
       if (!mat) return;
@@ -126,13 +126,13 @@ export function FactoryBuilding({ progressRef }: { progressRef: ProgressRef }) {
       {/* main body */}
       <mesh position={[0, 3, 0]} castShadow receiveShadow>
         <boxGeometry args={[12, 6, 10]} />
-        <meshStandardMaterial color="#1c1f26" metalness={0.35} roughness={0.65} />
+        <meshStandardMaterial color="#2b3040" metalness={0.35} roughness={0.6} />
       </mesh>
 
       {/* roof */}
       <mesh position={[0, 6.15, 0]} castShadow>
         <boxGeometry args={[12.6, 0.3, 10.6]} />
-        <meshStandardMaterial color="#12141a" metalness={0.4} roughness={0.6} />
+        <meshStandardMaterial color="#1c2029" metalness={0.4} roughness={0.55} />
       </mesh>
 
       {/* chimneys */}
@@ -156,7 +156,7 @@ export function FactoryBuilding({ progressRef }: { progressRef: ProgressRef }) {
       {/* ground */}
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial color="#08090c" roughness={1} />
+        <meshStandardMaterial color="#181a22" roughness={1} />
       </mesh>
     </group>
   );
