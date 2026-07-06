@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Brandix Unit 3 — Enterprise HR Analytics Dashboard" />
+  <title>Brandix Unit 3 · HR Analytics</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
+
+  <!-- Third-party libraries (non-module globals) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body>
+
+  <!-- ============ LOGIN SCREEN ============ -->
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-bg-orbs"><span></span><span></span><span></span></div>
+    <div class="login-card glass">
+      <div class="login-brand">
+        <div class="login-logo">B3</div>
+        <h1>Brandix Unit 3</h1>
+        <p>Enterprise HR Analytics Dashboard</p>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <label class="field">
+          <span>Email</span>
+          <input type="email" id="login-email" placeholder="you@brandix.com" required autocomplete="username" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+        </label>
+        <div id="login-error" class="login-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">Sign in</button>
+        <button type="button" class="btn btn-ghost btn-block" id="register-toggle">Create an account</button>
+      </form>
+      <div class="login-roles">
+        <span class="chip">HR Admin</span><span class="chip">HR Executive</span>
+        <span class="chip">Dept. Manager</span><span class="chip">Management</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ APP SHELL ============ -->
+  <div id="app" class="app hidden">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar glass">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">B3</div>
+        <div class="sidebar-title"><strong>Brandix U3</strong><small>HR Analytics</small></div>
+        <button id="sidebar-collapse" class="icon-btn" title="Collapse sidebar (Ctrl+B)">⟨</button>
+      </div>
+      <nav id="sidebar-nav" class="sidebar-nav"><!-- built by router --></nav>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="nav-item logout"><span class="nav-icon">⏻</span><span class="nav-label">Logout</span></button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <header class="topbar glass">
+        <button id="sidebar-toggle" class="icon-btn" title="Toggle sidebar">☰</button>
+        <h2 id="page-title">Dashboard</h2>
+        <div class="topbar-spacer"></div>
+        <div class="global-search">
+          <input id="global-search" type="search" placeholder="Search employees, departments… ( / )" />
+          <div id="global-search-results" class="search-results hidden"></div>
+        </div>
+        <button id="theme-toggle" class="icon-btn" title="Toggle light/dark (Ctrl+D)">🌙</button>
+        <button id="notif-bell" class="icon-btn notif-bell" title="Notifications">🔔<span id="notif-badge" class="notif-badge hidden">0</span></button>
+        <div id="user-chip" class="user-chip" title="Profile">
+          <div id="user-avatar" class="avatar">?</div>
+          <div class="user-meta"><strong id="user-name">—</strong><small id="user-role">—</small></div>
+        </div>
+      </header>
+      <main id="page-container" class="page-container"><!-- pages render here --></main>
+    </div>
+  </div>
+
+  <!-- Notifications drawer -->
+  <div id="notif-drawer" class="drawer glass hidden">
+    <div class="drawer-head"><h3>Notifications</h3><button class="icon-btn" id="notif-close">✕</button></div>
+    <div class="drawer-actions"><button class="btn btn-ghost btn-sm" id="notif-clear">Mark all read</button></div>
+    <div id="notif-list" class="notif-list"></div>
+  </div>
+
+  <!-- Global overlays -->
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+  <div id="loading-screen" class="loading-screen"><div class="spinner"></div><p>Loading HR Analytics…</p></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+/**
+ * Hash router + sidebar builder.
+ *
+ * Each page is a lazily-imported ES module exporting `render(container, params)`.
+ * Role guards come from the capability matrix in lib/auth.js. On navigation the
+ * previous page's realtime subscriptions are disposed via store.disposePage().
+ */
+import { can, currentUser } from "./lib/auth.js";
+import { disposePage } from "./lib/store.js";
+import { el } from "./lib/utils.js";
+import { emptyState } from "./lib/ui.js";
+import { track } from "./lib/firebase.js";
+
+/**
+ * Page registry. `cap` is the capability required to see the page
+ * (null = everyone signed in).
+ */
+export const PAGES = [
+  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, mod: () => import("./pages/dashboard.js") },
+  { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, mod: () => import("./pages/attendance.js") },
+  { id: "employees", title: "Employees", icon: "👥", cap: null, mod: () => import("./pages/employees.js") },
+  { id: "departments", title: "Departments", icon: "🏭", cap: null, mod: () => import("./pages/departments.js") },
+  { id: "budget", title: "Budget", icon: "💰", cap: null, mod: () => import("./pages/budget.js") },
+  { id: "vacancies", title: "Vacancies", icon: "🪑", cap: null, mod: () => import("./pages/vacancies.js") },
+  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, mod: () => import("./pages/recruitment.js") },
+  { id: "leaves", title: "Leaves", icon: "🌴", cap: null, mod: () => import("./pages/leaves.js") },
+  { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, mod: () => import("./pages/overtime.js") },
+  { id: "attrition", title: "Attrition", icon: "📉", cap: null, mod: () => import("./pages/attrition.js") },
+  { id: "performance", title: "Performance", icon: "🚀", cap: null, mod: () => import("./pages/performance.js") },
+  { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", mod: () => import("./pages/reports.js") },
+  { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", mod: () => import("./pages/email.js") },
+  { id: "notifications", title: "Notifications", icon: "🔔", cap: null, mod: () => import("./pages/notifications.js") },
+  { id: "analytics", title: "Analytics", icon: "📈", cap: null, mod: () => import("./pages/analytics.js") },
+  { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", mod: () => import("./pages/settings.js") },
+  { id: "profile", title: "Profile", icon: "👤", cap: null, mod: () => import("./pages/profile.js") },
+];
+
+let current = null;
+
+/** Build sidebar links for the signed-in user's role. */
+export function buildSidebar() {
+  const nav = document.getElementById("sidebar-nav");
+  nav.replaceChildren();
+  for (const p of PAGES) {
+    if (p.cap && !can(p.cap)) continue;
+    nav.append(el("button", {
+      class: "nav-item", "data-page": p.id,
+      onclick: () => { location.hash = `#/${p.id}`; },
+    },
+      el("span", { class: "nav-icon" }, p.icon),
+      el("span", { class: "nav-label" }, p.title)));
+  }
+}
+
+/** Navigate to the page named in the current hash. */
+export async function route() {
+  if (!currentUser) return;
+  const [, id = "dashboard", ...rest] = location.hash.split("/");
+  const page = PAGES.find((p) => p.id === id) || PAGES[0];
+  const container = document.getElementById("page-container");
+
+  // Guard
+  if (page.cap && !can(page.cap)) {
+    container.replaceChildren(emptyState("🔒", "Access restricted", "Your role does not have permission to view this page."));
+    return;
+  }
+
+  // Highlight nav + title
+  document.querySelectorAll(".nav-item[data-page]").forEach((n) =>
+    n.classList.toggle("active", n.dataset.page === page.id));
+  document.getElementById("page-title").textContent = page.title;
+  document.querySelector(".app")?.classList.remove("sidebar-open"); // close mobile drawer
+
+  // Dispose previous page's listeners, then render
+  disposePage();
+  current = page.id;
+  container.replaceChildren(el("div", { class: "page" },
+    el("div", { class: "skeleton", style: { height: "110px" } }),
+    el("div", { class: "skeleton", style: { height: "300px" } })));
+  try {
+    const mod = await page.mod();
+    if (current !== page.id) return; // user navigated away while loading
+    const root = el("div", { class: "page" });
+    container.replaceChildren(root);
+    await mod.render(root, rest);
+    track("page_view", { page: page.id });
+  } catch (e) {
+    console.error(`Failed to render page "${page.id}"`, e);
+    container.replaceChildren(emptyState("⚠️", "Something went wrong", String(e.message || e)));
+  }
+}
+
+/** Start listening to hash changes. */
+export function initRouter() {
+  window.addEventListener("hashchange", route);
+}
