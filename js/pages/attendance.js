@@ -13,15 +13,15 @@
  * Half Day, Work From Home, Holiday). In/Out times are used to derive working
  * minutes, late and early-out flags when Status is absent.
  */
-import { pageWatch, dbUpdate, getCached, read } from "../lib/store.js";
-import { can } from "../lib/auth.js";
+import { pageWatch, dbUpdate, dbPush, getCached, read } from "../lib/store.js";
+import { can, currentUser } from "../lib/auth.js";
 import { toast, modal, badge, statusTone, emptyState } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { filterBar, allOptions } from "../components/filters.js";
 import { kpiGrid } from "../components/kpi.js";
 import { notify } from "../lib/notify.js";
 import {
-  el, ym, today, fmtDate, fmtNum, fmtPct, hmToMin, minToHm, uniq, ymd, esc,
+  el, ym, today, fmtDate, fmtNum, fmtPct, hmToMin, minToHm, uniq, ymd, esc, toList, timeAgo,
 } from "../lib/utils.js";
 import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
 import { track } from "../lib/firebase.js";
@@ -91,9 +91,12 @@ export async function render(root) {
   ], (v) => { Object.assign(view, { date: v.date, month: v.month, dept: v.dept, shift: v.shift }); refresh(); });
 
   const tableHost = el("div");
+  const uploadsHost = el("div");
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "Attendance"), el("div", { class: "spacer" }), uploadBtn),
-    kpis, tabs, filters, tableHost);
+    kpis, tabs, filters, tableHost,
+    el("div", { class: "section-label" }, "Upload History"),
+    uploadsHost);
 
   /* ---------- realtime data ---------- */
   pageWatch("settings", (s) => { settings = s || {}; });
@@ -108,6 +111,28 @@ export async function render(root) {
     for (const day of Object.values(attendance)) for (const r of Object.values(day)) if (r.shift) shifts.add(r.shift);
     filters._setOptions("shift", allOptions([...shifts].sort()));
     refresh();
+  });
+
+  // Upload history — every attendance & budget import, newest first.
+  pageWatch("uploads", (v) => {
+    const rows = toList(v, "_key").sort((a, b) => (b.ts || 0) - (a.ts || 0))
+      .map((u) => ({ ...u, when: new Date(u.ts).toLocaleString(), ago: timeAgo(u.ts) }));
+    uploadsHost.replaceChildren(dataTable({
+      title: "Upload history",
+      exportName: "upload_history",
+      pageSize: 8,
+      columns: [
+        { key: "ago", label: "When", sortVal: (r) => r.ts, render: (r) => el("span", { title: r.when }, r.ago) },
+        { key: "type", label: "Type", render: (r) => badge(r.type === "budget" ? "Budget" : "Attendance", r.type === "budget" ? "warn" : "info"), exportVal: (r) => r.type },
+        { key: "file", label: "File" },
+        { key: "rows", label: "Rows", align: "right" },
+        { key: "info", label: "Details" },
+        { key: "range", label: "Period" },
+        { key: "by", label: "Uploaded by" },
+      ],
+      rows,
+      empty: "No files uploaded yet — use “Upload Excel” above",
+    }));
   });
 
   /* ---------- rendering ---------- */
@@ -287,6 +312,7 @@ export async function render(root) {
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const raw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
         parsed = parseRows(raw);
+        parsed.fileName = file.name;
         preview.replaceChildren(
           el("div", { class: "card", style: { padding: "12px 16px" } },
             el("p", { html: `<b>${file.name}</b> — ${parsed.records.length} valid rows` +
@@ -356,6 +382,15 @@ export async function render(root) {
       track("attendance_upload", { rows: parsed.records.length });
       notify("attendance", "Attendance uploaded",
         `${parsed.records.length} records for ${[...parsed.dates].sort().join(", ").slice(0, 80)}`);
+      // Record in the upload history log.
+      const sorted = [...parsed.dates].sort();
+      await dbPush("uploads", {
+        type: "attendance", file: parsed.fileName || "attendance.xlsx",
+        rows: parsed.records.length,
+        info: `${parsed.dates.size} day(s) · ${parsed.empIds.size} employee(s)`,
+        range: sorted.length ? `${sorted[0]} → ${sorted[sorted.length - 1]}` : "",
+        by: currentUser?.name || "—", ts: Date.now(),
+      });
       // Threshold alert
       const latest = [...parsed.dates].sort().pop();
       const stats = dayStats({ ...(getCached("attendance")?.[latest] || {}) }, employees);

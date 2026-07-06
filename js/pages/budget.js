@@ -8,8 +8,8 @@
  *
  * Excel columns: Department | Budget  (optional: Section)
  */
-import { pageWatch, dbUpdate, dbSet, read } from "../lib/store.js";
-import { can } from "../lib/auth.js";
+import { pageWatch, dbUpdate, dbSet, dbPush, read } from "../lib/store.js";
+import { can, currentUser } from "../lib/auth.js";
 import { toast, modal, badge, progressBar, emptyState } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
@@ -178,6 +178,7 @@ export async function render(root) {
       el("small", {}, "Columns: Department · Budget · (optional) Section"));
     const preview = el("div", { style: { marginTop: "12px" } });
     let parsed = null;
+    let uploadName = "";
 
     fileInput.addEventListener("change", () => fileInput.files[0] && handle(fileInput.files[0]));
     zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
@@ -196,6 +197,11 @@ export async function render(root) {
             if (!parsed || !Object.keys(parsed).length) { toast("Choose a file first", "warn"); return true; }
             await dbUpdate(`budget/${month}`, parsed);
             notify("budget", "Budget uploaded", `${Object.keys(parsed).length} departments for ${month}`);
+            await dbPush("uploads", {
+              type: "budget", file: uploadName || "budget.xlsx",
+              rows: Object.keys(parsed).length, info: `${Object.keys(parsed).length} departments`,
+              range: month, by: currentUser?.name || "—", ts: Date.now(),
+            });
             toast("Budget imported", "ok");
             close();
           },
@@ -205,6 +211,7 @@ export async function render(root) {
 
     async function handle(file) {
       try {
+        uploadName = file.name;
         const wb = XLSX.read(await file.arrayBuffer());
         const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         parsed = {};
