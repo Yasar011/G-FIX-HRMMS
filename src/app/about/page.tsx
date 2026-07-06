@@ -3,13 +3,24 @@
 import { useEffect, useState } from "react";
 import type { SiteContent } from "@/lib/site-content";
 import { DEFAULT_SITE_CONTENT, subscribeSiteContent } from "@/lib/site-content";
+import type { Internship } from "@/lib/internships";
+import { subscribeInternships } from "@/lib/internships";
 import { PublicShell, PageHeader } from "@/components/PublicShell";
 import { ImageSlot } from "@/components/ImageSlot";
 
 export default function AboutPage() {
   const [content, setContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
+  const [internships, setInternships] = useState<Internship[]>([]);
 
   useEffect(() => subscribeSiteContent(setContent, () => {}), []);
+  useEffect(
+    () =>
+      subscribeInternships(
+        (list) => setInternships(list.filter((i) => i.published).sort((a, b) => a.priority - b.priority)),
+        () => {}
+      ),
+    []
+  );
 
   return (
     <PublicShell active="/about">
@@ -75,6 +86,44 @@ export default function AboutPage() {
                 </div>
               ))}
             </div>
+
+            {internships.length > 0 && (
+              <>
+                <h3 className="mt-8 font-mono text-[11px] font-medium uppercase tracking-[0.2em] text-zinc-400">
+                  Internships
+                </h3>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {internships.map((internship) => (
+                    <div
+                      key={internship.id}
+                      className="flex gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+                    >
+                      {internship.logoUrl && (
+                        <ImageSlot
+                          src={internship.logoUrl}
+                          alt={internship.company}
+                          className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                        />
+                      )}
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {internship.role} · {internship.company}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          {internship.period}
+                          {internship.location ? ` · ${internship.location}` : ""}
+                        </p>
+                        {internship.description && (
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                            {internship.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
