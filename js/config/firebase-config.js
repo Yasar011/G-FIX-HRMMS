@@ -1,22 +1,19 @@
 /**
- * Firebase project configuration.
+ * Firebase project configuration — Brandix Unit 3 (hr-brandxunit-3).
  *
- * ⚠️ REPLACE the placeholder values below with your own Firebase web-app
- * config (Firebase console → Project settings → General → Your apps →
- * SDK setup and configuration → Config).
- *
- * The web API key is safe to ship to the browser — access control is
- * enforced by the security rules in `database.rules.json` / `storage.rules`.
+ * The Firebase web API key is safe to ship in client code; access is enforced
+ * by the security rules in `database.rules.json` / `storage.rules` and by the
+ * Authorized Domains list in the Firebase console. Keep those locked down.
  */
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
-  measurementId: "YOUR_MEASUREMENT_ID",
+  apiKey: "AIzaSyBWCV5hf-Bm6X14o4O-_pNlKUYYVRVtFIM",
+  authDomain: "hr-brandxunit-3.firebaseapp.com",
+  databaseURL: "https://hr-brandxunit-3-default-rtdb.firebaseio.com",
+  projectId: "hr-brandxunit-3",
+  storageBucket: "hr-brandxunit-3.firebasestorage.app",
+  messagingSenderId: "140480501128",
+  appId: "1:140480501128:web:b98c36a45778342426163d",
+  measurementId: "G-M5F5D4NLDY",
 };
 
 /** True when the config above has not been filled in yet. */
