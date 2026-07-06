@@ -117,22 +117,6 @@ export function ProductionPanel({ projects }: { projects: Project[] }) {
   );
 }
 
-export function InnovationPanel() {
-  return (
-    <Panel>
-      <h2 className="text-xl font-semibold">AI & Automation</h2>
-      <p className="mt-3 text-sm leading-relaxed text-zinc-700">
-        This is where Y-BOT lives — an AI assistant that answers questions about my work using data
-        stored in Firebase, streamed straight from this factory floor.
-      </p>
-      <p className="mt-4 rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">
-        Y-BOT is coming online soon. This department is reserved for the streaming chatbot,
-        project cards, and conversation history once the backend is wired up.
-      </p>
-    </Panel>
-  );
-}
-
 export function CreativePanel({ photos }: { photos: Photo[] }) {
   const published = photos.filter((p) => p.published).sort((a, b) => a.priority - b.priority);
   return (

@@ -12,11 +12,11 @@ import {
   CreativePanel,
   DispatchPanel,
   HrPanel,
-  InnovationPanel,
   ProductionPanel,
   QualityPanel,
   ReceptionPanel,
 } from "./DepartmentPanels";
+import { YBotChat } from "./YBotChat";
 import type { SiteContent } from "@/lib/site-content";
 import type { Project } from "@/lib/projects";
 import type { Photo } from "@/lib/photography";
@@ -143,7 +143,7 @@ export function FactoryJourney({
             {department.id === "reception" && <ReceptionPanel content={content} />}
             {department.id === "hr" && <HrPanel content={content} />}
             {department.id === "production" && <ProductionPanel projects={projects} />}
-            {department.id === "innovation" && <InnovationPanel />}
+            {department.id === "innovation" && <YBotChat />}
             {department.id === "creative" && <CreativePanel photos={photos} />}
             {department.id === "quality" && <QualityPanel certificates={certificates} />}
             {department.id === "dispatch" && <DispatchPanel content={content} />}
