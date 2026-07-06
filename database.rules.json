@@ -1,0 +1,81 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      ".read": "auth != null",
+      "$uid": {
+        "role": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || ($uid === auth.uid && !data.exists() && ((!root.child('users').exists() && newData.val() === 'hr_admin') || newData.val() === 'management')))"
+        },
+        "department": {
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || ($uid === auth.uid && !data.exists()))"
+        },
+        "$other": {
+          ".write": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'hr_admin')"
+        }
+      }
+    },
+
+    "employees": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "attendance": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive' || root.child('users').child(auth.uid).child('role').val() === 'dept_manager')"
+    },
+
+    "budget": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'hr_admin'"
+    },
+
+    "attrition": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "leaves": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists() && root.child('users').child(auth.uid).child('role').val() !== 'management'"
+    },
+
+    "vacancies": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "recruitment": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "settings": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'hr_admin'"
+    },
+
+    "emailAutomation": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "emailLogs": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+    },
+
+    "notifications": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "meta": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
