@@ -51,6 +51,8 @@ function onAuthChanged(user) {
     shellReady = true;
     initNotifications();
     initGlobalSearch();
+    // Email automation heartbeat (lazy — EmailJS may not be configured yet).
+    import("./lib/emailer.js").then((m) => m.startAutomationLoop()).catch(console.error);
     if (!location.hash) location.hash = "#/dashboard";
   }
   route();
