@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { uploadProjectFile } from "@/lib/storage";
+import { uploadToCloudinary } from "@/lib/cloudinary-upload";
 import type { ProjectDocument } from "@/lib/projects";
 
 export function DocumentListField({
@@ -22,7 +22,7 @@ export function DocumentListField({
       const uploaded = await Promise.all(
         Array.from(files).map(async (file) => ({
           name: file.name,
-          url: await uploadProjectFile(projectId, "documents", file),
+          url: await uploadToCloudinary(file, `projects/${projectId}/documents`),
         }))
       );
       onChange([...documents, ...uploaded]);

@@ -49,3 +49,9 @@ export async function getCertificates(): Promise<Certificate[]> {
   const value = snapshot.val() as Record<string, Omit<Certificate, "id">> | null;
   return value ? Object.entries(value).map(([id, data]) => ({ id, ...data })) : [];
 }
+
+export async function getCertificate(id: string): Promise<Certificate | null> {
+  const snapshot = await get(ref(db, `${CERTIFICATES_PATH}/${id}`));
+  if (!snapshot.exists()) return null;
+  return { id, ...(snapshot.val() as Omit<Certificate, "id">) };
+}

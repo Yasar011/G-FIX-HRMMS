@@ -49,3 +49,9 @@ export async function getPhotos(): Promise<Photo[]> {
   const value = snapshot.val() as Record<string, Omit<Photo, "id">> | null;
   return value ? Object.entries(value).map(([id, data]) => ({ id, ...data })) : [];
 }
+
+export async function getPhoto(id: string): Promise<Photo | null> {
+  const snapshot = await get(ref(db, `${PHOTOGRAPHY_PATH}/${id}`));
+  if (!snapshot.exists()) return null;
+  return { id, ...(snapshot.val() as Omit<Photo, "id">) };
+}

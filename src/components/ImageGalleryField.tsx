@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { uploadProjectFile } from "@/lib/storage";
+import { uploadToCloudinary } from "@/lib/cloudinary-upload";
 
 export function ImageGalleryField({
   projectId,
@@ -19,7 +19,7 @@ export function ImageGalleryField({
     setUploading(true);
     try {
       const uploaded = await Promise.all(
-        Array.from(files).map((file) => uploadProjectFile(projectId, "images", file))
+        Array.from(files).map((file) => uploadToCloudinary(file, `projects/${projectId}/images`))
       );
       onChange([...images, ...uploaded]);
     } finally {
