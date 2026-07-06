@@ -80,13 +80,16 @@ export function FactoryJourney({
   };
 
   return (
-    <section ref={sectionRef} className="relative bg-black" style={{ height: `${JOURNEY_HEIGHT_VH}vh` }}>
+    <section ref={sectionRef} className="relative bg-sky-100" style={{ height: `${JOURNEY_HEIGHT_VH}vh` }}>
       <div className="sticky top-0 h-screen w-full overflow-hidden">
         <Canvas shadows dpr={[1, 1.75]} gl={{ antialias: true }}>
           <Suspense fallback={null}>
             <FactoryScene progressRef={progressRef} />
           </Suspense>
         </Canvas>
+
+        {/* scrim so the title always reads, regardless of sky brightness behind it */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-56 bg-gradient-to-b from-black/45 to-transparent" />
 
         {/* department quick nav */}
         <div className="pointer-events-auto absolute left-6 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-3 sm:flex">
@@ -152,9 +155,8 @@ export function FactoryJourney({
             progress > 0.01 ? "opacity-0" : "opacity-100"
           }`}
         >
-          <div className="flex flex-col items-center gap-2 text-white/60">
+          <div className="flex flex-col items-center gap-2 rounded-full bg-black/40 px-4 py-2 text-white/80 backdrop-blur">
             <span className="text-xs uppercase tracking-[0.3em]">Scroll to enter</span>
-            <div className="h-8 w-px animate-pulse bg-white/40" />
           </div>
         </div>
 

@@ -46,7 +46,7 @@ function WindowGrid({ progressRef }: { progressRef: ProgressRef }) {
             ref={(m) => {
               if (m) materials.current[i] = m;
             }}
-            color="#0b1220"
+            color="#8fb4d9"
             emissive="#fbbf24"
             emissiveIntensity={0}
             toneMapped={false}
@@ -79,7 +79,7 @@ function EntranceGlow({ progressRef }: { progressRef: ProgressRef }) {
       {/* door recess */}
       <mesh position={[0, 1.4, 4.98]}>
         <boxGeometry args={[2.4, 2.8, 0.3]} />
-        <meshStandardMaterial color="#04050a" roughness={0.9} />
+        <meshStandardMaterial color="#2a3444" roughness={0.9} />
       </mesh>
 
       {/* neon strips flanking the entrance */}
@@ -104,12 +104,12 @@ function EntranceGlow({ progressRef }: { progressRef: ProgressRef }) {
       {/* sign */}
       <mesh ref={signRef} position={[0, 4.6, 5.05]}>
         <planeGeometry args={[6, 0.9]} />
-        <meshStandardMaterial color="#0b1220" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
+        <meshStandardMaterial color="#1a2433" emissive="#22d3ee" emissiveIntensity={0.6} toneMapped={false} />
       </mesh>
       <Text
         position={[0, 4.6, 5.2]}
         fontSize={0.42}
-        color="#e0f7fa"
+        color="#ffffff"
         anchorX="center"
         anchorY="middle"
         letterSpacing={0.08}
@@ -126,13 +126,13 @@ export function FactoryBuilding({ progressRef }: { progressRef: ProgressRef }) {
       {/* main body */}
       <mesh position={[0, 3, 0]} castShadow receiveShadow>
         <boxGeometry args={[12, 6, 10]} />
-        <meshStandardMaterial color="#2b3040" metalness={0.35} roughness={0.6} />
+        <meshStandardMaterial color="#eef1f6" metalness={0.15} roughness={0.55} />
       </mesh>
 
       {/* roof */}
       <mesh position={[0, 6.15, 0]} castShadow>
         <boxGeometry args={[12.6, 0.3, 10.6]} />
-        <meshStandardMaterial color="#1c2029" metalness={0.4} roughness={0.55} />
+        <meshStandardMaterial color="#c7ccd6" metalness={0.2} roughness={0.5} />
       </mesh>
 
       {/* chimneys */}
@@ -140,7 +140,7 @@ export function FactoryBuilding({ progressRef }: { progressRef: ProgressRef }) {
         <group key={x}>
           <mesh position={[x, 7.6, -1.5]} castShadow>
             <cylinderGeometry args={[0.5, 0.6, 3, 12]} />
-            <meshStandardMaterial color="#2a2d36" metalness={0.5} roughness={0.5} />
+            <meshStandardMaterial color="#b7bdc9" metalness={0.4} roughness={0.45} />
           </mesh>
           <mesh position={[x, 9.15, -1.5]}>
             <torusGeometry args={[0.5, 0.06, 8, 16]} />
@@ -156,7 +156,7 @@ export function FactoryBuilding({ progressRef }: { progressRef: ProgressRef }) {
       {/* ground */}
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[200, 200]} />
-        <meshStandardMaterial color="#181a22" roughness={1} />
+        <meshStandardMaterial color="#cfd8e3" roughness={1} />
       </mesh>
     </group>
   );

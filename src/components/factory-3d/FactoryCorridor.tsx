@@ -16,28 +16,28 @@ export function FactoryCorridor() {
       {/* floor */}
       <mesh position={[0, 0, -CORRIDOR_LENGTH / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[9, CORRIDOR_LENGTH]} />
-        <meshStandardMaterial color="#14161d" metalness={0.2} roughness={0.85} />
+        <meshStandardMaterial color="#e4e9f0" metalness={0.1} roughness={0.8} />
       </mesh>
 
       {/* side walls */}
       {[-4.4, 4.4].map((x) => (
         <mesh key={x} position={[x, 2.6, -CORRIDOR_LENGTH / 2]}>
           <boxGeometry args={[0.3, 5.2, CORRIDOR_LENGTH]} />
-          <meshStandardMaterial color="#1c1f28" metalness={0.3} roughness={0.7} />
+          <meshStandardMaterial color="#f4f6f9" metalness={0.15} roughness={0.65} />
         </mesh>
       ))}
 
       {/* ceiling */}
       <mesh position={[0, 5.2, -CORRIDOR_LENGTH / 2]}>
         <boxGeometry args={[9, 0.3, CORRIDOR_LENGTH]} />
-        <meshStandardMaterial color="#101218" metalness={0.3} roughness={0.7} />
+        <meshStandardMaterial color="#dfe4ec" metalness={0.15} roughness={0.65} />
       </mesh>
 
       {/* overhead light strips */}
       {strips.map((z) => (
         <mesh key={z} position={[0, 5.02, z]}>
           <boxGeometry args={[3.2, 0.06, 0.5]} />
-          <meshStandardMaterial color="#cfe8ff" emissive="#8fd6ff" emissiveIntensity={1.6} toneMapped={false} />
+          <meshStandardMaterial color="#ffffff" emissive="#8fd6ff" emissiveIntensity={1.6} toneMapped={false} />
         </mesh>
       ))}
     </group>

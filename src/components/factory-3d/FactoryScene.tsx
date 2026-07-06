@@ -11,18 +11,18 @@ import type { ProgressRef } from "./types";
 export function FactoryScene({ progressRef }: { progressRef: ProgressRef }) {
   return (
     <>
-      <fog attach="fog" args={["#221c3d", 16, 70]} />
+      <fog attach="fog" args={["#dbe9f7", 26, 85]} />
       <FactorySky />
 
-      <ambientLight intensity={0.65} color="#585fa8" />
+      <ambientLight intensity={1.1} color="#ffffff" />
       <directionalLight
-        position={[10, 14, 6]}
-        intensity={1.3}
-        color="#c9d4ff"
+        position={[10, 18, 8]}
+        intensity={2}
+        color="#fff7e6"
         castShadow
       />
-      <hemisphereLight args={["#4c53a0", "#161327", 0.7]} />
-      <pointLight position={[0, 5, 16]} intensity={2.2} color="#eef2ff" distance={26} />
+      <hemisphereLight args={["#ffffff", "#cbd9e8", 0.9]} />
+      <pointLight position={[0, 5, 16]} intensity={1.6} color="#ffffff" distance={26} />
 
       <FactoryBuilding progressRef={progressRef} />
       <FactoryCorridor />

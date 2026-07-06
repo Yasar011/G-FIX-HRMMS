@@ -39,7 +39,7 @@ export function DepartmentBeacon({
       {/* pylon */}
       <mesh position={[0, 1.6, 0]}>
         <cylinderGeometry args={[0.18, 0.22, 3.2, 10]} />
-        <meshStandardMaterial color="#20232c" metalness={0.5} roughness={0.5} />
+        <meshStandardMaterial color="#c3cad6" metalness={0.4} roughness={0.4} />
       </mesh>
 
       {/* rotating accent ring */}
@@ -82,11 +82,11 @@ export function DepartmentBeacon({
       {/* crate props for a bit of set-dressing */}
       <mesh position={[0.7, 0.4, 0.6]} rotation={[0, 0.3, 0]}>
         <boxGeometry args={[0.8, 0.8, 0.8]} />
-        <meshStandardMaterial color="#2a2d36" roughness={0.9} />
+        <meshStandardMaterial color="#d7dce4" roughness={0.85} />
       </mesh>
       <mesh position={[-0.6, 0.3, -0.5]} rotation={[0, -0.4, 0]}>
         <boxGeometry args={[0.6, 0.6, 0.6]} />
-        <meshStandardMaterial color="#23262f" roughness={0.9} />
+        <meshStandardMaterial color="#c9cfd9" roughness={0.85} />
       </mesh>
     </group>
   );

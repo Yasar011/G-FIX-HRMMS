@@ -9,7 +9,7 @@ import { ImageSlot } from "@/components/ImageSlot";
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-h-[70vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-black/55 p-8 text-white shadow-2xl backdrop-blur-xl">
+    <div className="max-h-[70vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-black/10 bg-white/85 p-8 text-zinc-900 shadow-2xl backdrop-blur-xl">
       {children}
     </div>
   );
@@ -26,18 +26,18 @@ export function ReceptionPanel({ content }: { content: SiteContent }) {
         />
         <div>
           <h2 className="text-2xl font-semibold">{content.heroName}</h2>
-          <p className="mt-2 max-w-md text-sm text-white/70">{content.heroHeadline}</p>
+          <p className="mt-2 max-w-md text-sm text-zinc-600">{content.heroHeadline}</p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">
           <a
             href={content.resumeUrl}
-            className="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-medium text-black hover:bg-amber-300"
+            className="rounded-full bg-amber-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-amber-400"
           >
             Download resume
           </a>
           <a
             href={`mailto:${content.contactEmail}`}
-            className="rounded-full border border-white/30 px-5 py-2.5 text-sm font-medium text-white hover:bg-white/10"
+            className="rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100"
           >
             Get in touch
           </a>
@@ -51,18 +51,18 @@ export function HrPanel({ content }: { content: SiteContent }) {
   return (
     <Panel>
       <h2 className="text-xl font-semibold">About Me</h2>
-      <p className="mt-3 text-sm leading-relaxed text-white/75">{content.aboutText}</p>
+      <p className="mt-3 text-sm leading-relaxed text-zinc-700">{content.aboutText}</p>
 
-      <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-white/60">Skills</h3>
+      <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-zinc-500">Skills</h3>
       <div className="mt-3 flex flex-wrap gap-2">
         {content.skills.map((skill) => (
-          <span key={skill} className="rounded-full bg-white/10 px-3 py-1 text-sm">
+          <span key={skill} className="rounded-full bg-sky-100 px-3 py-1 text-sm text-sky-800">
             {skill}
           </span>
         ))}
       </div>
 
-      <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-white/60">Timeline</h3>
+      <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-zinc-500">Timeline</h3>
       <div className="mt-3 flex flex-col gap-4">
         {content.timeline.map((entry, i) => (
           <div key={`${entry.company}-${i}`} className="flex gap-3">
@@ -75,8 +75,8 @@ export function HrPanel({ content }: { content: SiteContent }) {
               <p className="text-sm font-medium">
                 {entry.role} · {entry.company}
               </p>
-              <p className="text-xs text-white/50">{entry.period}</p>
-              <p className="mt-1 text-xs text-white/70">{entry.description}</p>
+              <p className="text-xs text-zinc-500">{entry.period}</p>
+              <p className="mt-1 text-xs text-zinc-600">{entry.description}</p>
             </div>
           </div>
         ))}
@@ -91,12 +91,12 @@ export function ProductionPanel({ projects }: { projects: Project[] }) {
     <Panel>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Apparel Projects</h2>
-        <Link href="/projects" className="text-sm text-amber-300 underline">
+        <Link href="/projects" className="text-sm text-orange-600 underline">
           View all
         </Link>
       </div>
       {published.length === 0 ? (
-        <p className="mt-4 text-sm text-white/60">
+        <p className="mt-4 text-sm text-zinc-500">
           No published projects yet — add and publish one from the admin panel.
         </p>
       ) : (
@@ -105,10 +105,10 @@ export function ProductionPanel({ projects }: { projects: Project[] }) {
             <Link
               key={project.id}
               href={`/projects/${project.slug}`}
-              className="rounded-xl border border-white/10 p-4 hover:border-amber-300/50"
+              className="rounded-xl border border-zinc-200 p-4 hover:border-orange-400"
             >
               <p className="font-medium">{project.name}</p>
-              <p className="mt-1 text-sm text-white/60">{project.shortDescription}</p>
+              <p className="mt-1 text-sm text-zinc-500">{project.shortDescription}</p>
             </Link>
           ))}
         </div>
@@ -121,11 +121,11 @@ export function InnovationPanel() {
   return (
     <Panel>
       <h2 className="text-xl font-semibold">AI & Automation</h2>
-      <p className="mt-3 text-sm leading-relaxed text-white/75">
+      <p className="mt-3 text-sm leading-relaxed text-zinc-700">
         This is where Y-BOT lives — an AI assistant that answers questions about my work using data
         stored in Firebase, streamed straight from this factory floor.
       </p>
-      <p className="mt-4 rounded-xl border border-dashed border-white/20 p-4 text-sm text-white/50">
+      <p className="mt-4 rounded-xl border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">
         Y-BOT is coming online soon. This department is reserved for the streaming chatbot,
         project cards, and conversation history once the backend is wired up.
       </p>
@@ -139,7 +139,7 @@ export function CreativePanel({ photos }: { photos: Photo[] }) {
     <Panel>
       <h2 className="text-xl font-semibold">Photography</h2>
       {published.length === 0 ? (
-        <p className="mt-4 text-sm text-white/60">
+        <p className="mt-4 text-sm text-zinc-500">
           No photos published yet — add albums from the admin panel to fill this studio.
         </p>
       ) : (
@@ -165,7 +165,7 @@ export function QualityPanel({ certificates }: { certificates: Certificate[] }) 
     <Panel>
       <h2 className="text-xl font-semibold">Certifications</h2>
       {published.length === 0 ? (
-        <p className="mt-4 text-sm text-white/60">
+        <p className="mt-4 text-sm text-zinc-500">
           No certificates published yet — add internship letters, awards, and completions from the
           admin panel.
         </p>
@@ -177,13 +177,13 @@ export function QualityPanel({ certificates }: { certificates: Certificate[] }) 
               href={cert.fileUrl}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-between rounded-xl border border-white/10 p-3 hover:border-emerald-300/50"
+              className="flex items-center justify-between rounded-xl border border-zinc-200 p-3 hover:border-emerald-400"
             >
               <span>
                 <span className="font-medium">{cert.title}</span>
-                <span className="ml-2 text-sm text-white/50">{cert.issuer}</span>
+                <span className="ml-2 text-sm text-zinc-500">{cert.issuer}</span>
               </span>
-              <span className="text-xs text-white/40">{cert.date}</span>
+              <span className="text-xs text-zinc-400">{cert.date}</span>
             </a>
           ))}
         </div>
@@ -197,26 +197,26 @@ export function DispatchPanel({ content }: { content: SiteContent }) {
     <Panel>
       <h2 className="text-xl font-semibold">Get in touch</h2>
       <div className="mt-4 flex flex-wrap gap-4 text-sm">
-        <a href={`mailto:${content.contactEmail}`} className="underline">
+        <a href={`mailto:${content.contactEmail}`} className="text-sky-700 underline">
           Email
         </a>
         {content.githubUrl && (
-          <a href={content.githubUrl} target="_blank" rel="noreferrer" className="underline">
+          <a href={content.githubUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline">
             GitHub
           </a>
         )}
         {content.linkedinUrl && (
-          <a href={content.linkedinUrl} target="_blank" rel="noreferrer" className="underline">
+          <a href={content.linkedinUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline">
             LinkedIn
           </a>
         )}
         {content.instagramUrl && (
-          <a href={content.instagramUrl} target="_blank" rel="noreferrer" className="underline">
+          <a href={content.instagramUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline">
             Instagram
           </a>
         )}
       </div>
-      <p className="mt-8 text-xs text-white/40">
+      <p className="mt-8 text-xs text-zinc-400">
         © {new Date().getFullYear()} {content.heroName}. All rights reserved.
       </p>
     </Panel>
