@@ -84,12 +84,16 @@ function breakdownCard(title, icon, budgetItems, actualMap = null, noCompareNote
   }
 
   return el("div", { class: "card" },
-    el("div", { class: "card-head" }, el("h4", {}, `${icon} ${title}`)),
+    el("div", { class: "card-head" },
+      el("h4", {}, `${icon} ${title}`),
+      !showActual && actualMap ? badge("Budget only", "dim") : null),
     rows.length
       ? el("div", {},
-          showActual ? el("div", { class: "stat-row", style: { fontSize: "11px" } },
+          el("div", { class: "stat-row", style: { fontSize: "11px" } },
             el("span", { class: "muted" }, "Role"),
-            el("span", { class: "muted", style: { display: "flex", gap: "14px" } }, el("span", {}, "Budget"), el("span", {}, "Actual"))) : null,
+            showActual
+              ? el("span", { class: "muted", style: { display: "flex", gap: "14px" } }, el("span", {}, "Budget"), el("span", {}, "Actual"))
+              : el("span", { class: "muted" }, "Budget")),
           ...rows.map((r) => el("div", { class: "stat-row" },
             el("span", { class: r.dim ? "muted" : "" }, r.name),
             showActual
