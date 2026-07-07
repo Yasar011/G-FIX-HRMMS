@@ -32,7 +32,7 @@ function flattenRequests(v) {
 }
 
 export async function render(root) {
-  const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/hr-request.html`;
+  const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
   let employees = [];
 
   const kpis = kpiGrid([
@@ -46,9 +46,9 @@ export async function render(root) {
   const linkCard = el("div", { class: "card", style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
     el("span", { style: { fontSize: "20px" } }, "🔗"),
     el("div", { style: { flex: 1, minWidth: "220px" } },
-      el("strong", {}, "Public request link"),
+      el("strong", {}, "Employee Portal link"),
       el("p", { class: "muted", style: { fontSize: "12.5px", marginTop: "2px" } },
-        "Share this with employees (notice board, WhatsApp, printed poster). No login required — turn it on/off in Settings.")),
+        "One link for employees to request to visit HR, request leave, and check their leave status (notice board, WhatsApp, printed poster). No login required — the Visit HR option can be turned on/off in Settings.")),
     linkInput,
     el("button", {
       class: "btn btn-sm",

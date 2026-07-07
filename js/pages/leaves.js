@@ -19,7 +19,7 @@ export async function render(root) {
   const approver = can("approve_leaves");
   const scope = deptScope();
   let employees = [];
-  const statusLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/leave-status.html`;
+  const portalLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
 
   const kpis = kpiGrid([
     { id: "pending", label: "Pending Approval", icon: "⏳", color: C.warn },
@@ -31,17 +31,17 @@ export async function render(root) {
   const trendChart = chartCard({ title: "Leave Days Trend (12 months)", type: "bar", datasets: [] });
   const tableHost = el("div");
 
-  const linkInput = el("input", { type: "text", value: statusLink, readonly: "", style: { flex: 1 } });
+  const linkInput = el("input", { type: "text", value: portalLink, readonly: "", style: { flex: 1 } });
   const linkCard = el("div", { class: "card", style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
     el("span", { style: { fontSize: "20px" } }, "🔗"),
     el("div", { style: { flex: 1, minWidth: "220px" } },
-      el("strong", {}, "Public 'Check My Leave' link"),
+      el("strong", {}, "Employee Portal link"),
       el("p", { class: "muted", style: { fontSize: "12.5px", marginTop: "2px" } },
-        "Share this so employees can check their own leave status and download an approved-leave certificate. No login required.")),
+        "One link for employees to request leave, check leave status + download an approved-leave certificate, and request to visit HR. No login required.")),
     linkInput,
     el("button", {
       class: "btn btn-sm",
-      onclick: () => { navigator.clipboard?.writeText(statusLink); toast("Link copied", "ok"); },
+      onclick: () => { navigator.clipboard?.writeText(portalLink); toast("Link copied", "ok"); },
     }, "📋 Copy"));
 
   root.append(
@@ -87,6 +87,11 @@ export async function render(root) {
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
         { key: "department", label: "Department" },
+        {
+          key: "source", label: "From",
+          render: (r) => r.source === "employee" ? badge("🙋 Employee", "dim") : badge("👤 HR", "info"),
+          exportVal: (r) => r.source === "employee" ? "Employee" : "HR",
+        },
         {
           key: "type", label: "Type",
           render: (r) => el("span", {}, r.type, r.halfDay ? el("span", { class: "chip", style: { marginLeft: "6px", fontSize: "10px" } }, "½ day") : null),
