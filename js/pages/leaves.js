@@ -72,7 +72,11 @@ export async function render(root) {
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
         { key: "department", label: "Department" },
-        { key: "type", label: "Type" },
+        {
+          key: "type", label: "Type",
+          render: (r) => el("span", {}, r.type, r.halfDay ? el("span", { class: "chip", style: { marginLeft: "6px", fontSize: "10px" } }, "½ day") : null),
+          exportVal: (r) => r.type + (r.halfDay ? " (half day)" : ""),
+        },
         { key: "from", label: "From", render: (r) => fmtDate(r.from), exportVal: (r) => r.from },
         { key: "to", label: "To", render: (r) => fmtDate(r.to), exportVal: (r) => r.to },
         { key: "days", label: "Days", align: "right" },
@@ -93,15 +97,17 @@ export async function render(root) {
     }));
   });
 
-  /** Approve/reject and (on approve) mark attendance L for the range. */
+  /** Approve/reject and (on approve) mark attendance L (or HD for half-day) for the range. */
   async function decide(leave, status) {
-    if (!(await confirmDialog(`${status === "approved" ? "Approve" : "Reject"} ${leave.name}'s ${leave.type} leave (${fmtDate(leave.from)} → ${fmtDate(leave.to)})?`, { danger: status === "rejected" }))) return;
+    const span = leave.halfDay ? `${fmtDate(leave.from)} (half day)` : `${fmtDate(leave.from)} → ${fmtDate(leave.to)}`;
+    if (!(await confirmDialog(`${status === "approved" ? "Approve" : "Reject"} ${leave.name}'s ${leave.type} leave (${span})?`, { danger: status === "rejected" }))) return;
     await dbUpdate(`leaves/${leave._key}`, { status, approvedBy: currentUser?.name || "—", decidedAt: Date.now() });
     if (status === "approved") {
       const updates = {};
-      for (const d of dateRange(leave.from, leave.to)) updates[`${d}/${leave.empId}`] = { status: "L" };
+      if (leave.halfDay) updates[`${leave.from}/${leave.empId}`] = { status: "HD" };
+      else for (const d of dateRange(leave.from, leave.to)) updates[`${d}/${leave.empId}`] = { status: "L" };
       await dbUpdate("attendance", updates);
-      notify("leave", "Leave approved", `${leave.name}: ${leave.type}, ${fmtDate(leave.from)} → ${fmtDate(leave.to)}`);
+      notify("leave", "Leave approved", `${leave.name}: ${leave.type}, ${span}`);
     }
     toast(`Leave ${status}`, status === "approved" ? "ok" : "warn");
   }
@@ -112,7 +118,27 @@ export async function render(root) {
     const typeSel = el("select", {}, ...TYPES.map((t) => el("option", { value: t }, t)));
     const fromInput = el("input", { type: "date", value: today() });
     const toInput = el("input", { type: "date", value: today() });
+    const halfDayChk = el("input", { type: "checkbox" });
+    const daysLabel = el("strong", {}, "1");
+    const toField = el("label", { class: "field" }, el("span", {}, "To"), toInput);
     const reason = el("input", { type: "text", placeholder: "Optional" });
+
+    /** Keep the day-count preview and the To field in sync with From/To/Half-day. */
+    function syncDays() {
+      if (halfDayChk.checked) {
+        toInput.value = fromInput.value;
+        toField.style.display = "none";
+        daysLabel.textContent = "0.5";
+      } else {
+        toField.style.display = "";
+        if (toInput.value < fromInput.value) toInput.value = fromInput.value;
+        daysLabel.textContent = String(dateRange(fromInput.value, toInput.value).length);
+      }
+    }
+    halfDayChk.addEventListener("change", syncDays);
+    fromInput.addEventListener("change", syncDays);
+    toInput.addEventListener("change", syncDays);
+    syncDays();
 
     modal({
       title: "Apply for leave",
@@ -121,7 +147,9 @@ export async function render(root) {
         el("label", { class: "field" }, el("span", {}, "Employee"), empSel),
         el("label", { class: "field" }, el("span", {}, "Type"), typeSel),
         el("label", { class: "field" }, el("span", {}, "From"), fromInput),
-        el("label", { class: "field" }, el("span", {}, "To"), toInput),
+        toField,
+        el("label", { class: "inline", style: { marginTop: "8px" } }, halfDayChk, "Half day (single day only)"),
+        el("label", { class: "field" }, el("span", {}, "Days"), el("div", { style: { padding: "9px 0" } }, daysLabel)),
         el("label", { class: "field" }, el("span", {}, "Reason"), reason)),
       actions: [
         { label: "Cancel", class: "btn-ghost", onClick: () => {} },
@@ -129,13 +157,16 @@ export async function render(root) {
           label: "Submit", class: "btn-primary",
           onClick: async (e, close) => {
             const emp = active.find((x) => x.id === empSel.value);
-            if (!emp || !fromInput.value || !toInput.value || toInput.value < fromInput.value) {
+            if (!emp || !fromInput.value || (!halfDayChk.checked && toInput.value < fromInput.value)) {
               toast("Check the employee and date range", "warn"); return true;
             }
+            const halfDay = halfDayChk.checked;
+            const to = halfDay ? fromInput.value : toInput.value;
             await dbPush("leaves", {
               empId: emp.id, name: emp.name, department: emp.department || "—",
-              type: typeSel.value, from: fromInput.value, to: toInput.value,
-              days: dateRange(fromInput.value, toInput.value).length,
+              type: typeSel.value, from: fromInput.value, to,
+              days: halfDay ? 0.5 : dateRange(fromInput.value, to).length,
+              halfDay,
               reason: reason.value.trim(), status: "pending", appliedAt: Date.now(),
             });
             toast("Leave request submitted", "ok");

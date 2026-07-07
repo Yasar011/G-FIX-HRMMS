@@ -16,7 +16,7 @@
  */
 import { auth, db, signInAnonymously, onAuthStateChanged, ref, get, push, serverTimestamp } from "./lib/firebase.js";
 import { toast } from "./lib/ui.js";
-import { initials, esc } from "./lib/utils.js";
+import { initials } from "./lib/utils.js";
 
 const $ = (id) => document.getElementById(id);
 const steps = ["disabled", "loading", "id", "confirm", "reason", "success"];
@@ -62,12 +62,13 @@ function wireForm() {
     showStep("id");
     $("emp-id-input").focus();
   });
-  $("confirm-btn").addEventListener("click", () => {
+  $("confirm-btn").addEventListener("click", async () => {
     $("reason-avatar").textContent = initials(current.name);
     $("reason-name").textContent = current.name;
     $("reason-dept").textContent = current.department || "—";
     $("reason-input").value = "";
     $("reason-error").textContent = "";
+    await showHrNotice();
     showStep("reason");
   });
   $("back-btn").addEventListener("click", () => showStep("confirm"));
@@ -112,6 +113,27 @@ async function lookupEmployee() {
   }
 }
 
+/**
+ * Show a banner if HR has an open (pending or seen) request asking this
+ * employee to come in — read-only, scoped to just this employee's own ID
+ * (the database rules let any signed-in session, including anonymous, read
+ * exactly hrRequests/{ownEmpId}, never anyone else's).
+ */
+async function showHrNotice() {
+  const notice = $("hr-notice");
+  notice.classList.add("hidden");
+  try {
+    const snap = await get(ref(db, `hrRequests/${current.empId}`));
+    const all = Object.values(snap.val() || {});
+    const open = all.filter((r) => r.direction === "hr" && (r.status === "pending" || r.status === "seen"))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
+    if (open) {
+      $("hr-notice-reason").textContent = open.reason || "Please visit the HR office at your earliest convenience.";
+      notice.classList.remove("hidden");
+    }
+  } catch (e) { console.error(e); /* non-fatal — the submit form still works without this */ }
+}
+
 async function submitRequest() {
   const reason = $("reason-input").value.trim();
   const errEl = $("reason-error");
@@ -122,9 +144,9 @@ async function submitRequest() {
   btn.disabled = true;
   btn.textContent = "Submitting…";
   try {
-    await push(ref(db, "hrRequests"), {
-      empId: current.empId, name: current.name, department: current.department || "",
-      reason, status: "pending", createdAt: serverTimestamp(),
+    await push(ref(db, `hrRequests/${current.empId}`), {
+      name: current.name, department: current.department || "",
+      reason, status: "pending", direction: "employee", createdAt: serverTimestamp(),
     });
     await push(ref(db, "notifications"), {
       type: "hr_request", title: "HR visit requested",
