@@ -324,27 +324,53 @@ function parseMonthHeader(h) {
   return `${2000 + Number(m[2])}-${String(mon).padStart(2, "0")}`;
 }
 
-/** Parse a wide per-designation, per-month budget export. */
+/** Look up a field on an object-row by fuzzy/aliased header name. */
+function pickField(row, ...aliases) {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const target = normHeader(alias);
+    const k = keys.find((kk) => normHeader(kk) === target);
+    if (k) return row[k];
+  }
+  return "";
+}
+
+/** Add (or accumulate onto) a {name, count} entry in a breakdown array. */
+function accumulate(arr, name, n) {
+  if (!name) return;
+  const existing = arr.find((x) => x.name === name);
+  if (existing) existing.count += n; else arr.push({ name, count: n });
+}
+
+/**
+ * Parse a wide per-designation, per-month budget export. Alongside the
+ * per-department total, also captures a detailed breakdown by designation,
+ * category (e.g. Staff / Associate-Indirect) and Local/Expat — so a
+ * department page can show exactly what mix of roles is budgeted, not just
+ * a headcount number.
+ */
 function parseWideBudget(raw) {
   const monthCols = Object.keys(raw[0] || {}).map((key) => ({ key, month: parseMonthHeader(key) })).filter((x) => x.month);
   const months = {};
   for (const row of raw) {
-    const dept = sanitizeKey(row["Department"] || row["Dept"] || "");
-    const designation = String(row["Unique Designation"] || row["Designation"] || "").trim();
+    const dept = sanitizeKey(pickField(row, "Department", "Dept"));
+    const designation = String(pickField(row, "Unique Designation", "Designation")).trim();
+    const category = String(pickField(row, "Category 2", "Category")).trim();
+    const localExpat = String(pickField(row, "Local/ Expat", "Local/Expat", "Local Expat")).trim();
     if (dept === "—") continue;
     for (const { key, month } of monthCols) {
       const raw_v = row[key];
       const n = raw_v === "-" || raw_v === "" ? 0 : Number(raw_v);
       if (!n || isNaN(n)) continue;
       if (!months[month]) months[month] = {};
-      if (!months[month][dept]) months[month][dept] = { total: 0, designations: [] };
+      if (!months[month][dept]) months[month][dept] = { total: 0, designations: [], categories: [], localExpat: [] };
       months[month][dept].total += n;
-      if (designation) {
-        // Array, not a keyed object — real designation titles ("Sr. Manager",
-        // "QC/QA Officer") routinely contain characters Firebase forbids in keys.
-        const existing = months[month][dept].designations.find((d) => d.name === designation);
-        if (existing) existing.count += n; else months[month][dept].designations.push({ name: designation, count: n });
-      }
+      // Arrays, not keyed objects — real designation/category titles ("Sr.
+      // Manager", "QC/QA Officer") routinely contain characters Firebase
+      // forbids in keys.
+      accumulate(months[month][dept].designations, designation, n);
+      accumulate(months[month][dept].categories, category, n);
+      accumulate(months[month][dept].localExpat, localExpat, n);
     }
   }
   const monthList = monthCols.map((m) => m.month).sort();

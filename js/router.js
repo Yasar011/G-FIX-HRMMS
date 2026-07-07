@@ -13,39 +13,46 @@ import { track } from "./lib/firebase.js";
 
 /**
  * Page registry. `cap` is the capability required to see the page
- * (null = everyone signed in).
+ * (null = everyone signed in). `group` clusters related pages under a
+ * section label in the sidebar so a new user isn't faced with one long
+ * flat list of 17 items.
  */
 export const PAGES = [
-  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, mod: () => import("./pages/dashboard.js") },
-  { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, mod: () => import("./pages/attendance.js") },
-  { id: "uploads", title: "Data Upload", icon: "⬆️", cap: "upload_attendance", mod: () => import("./pages/uploads.js") },
-  { id: "employees", title: "Employees", icon: "👥", cap: null, mod: () => import("./pages/employees.js") },
-  { id: "departments", title: "Departments", icon: "🏭", cap: null, mod: () => import("./pages/departments.js") },
-  { id: "budget", title: "Budget", icon: "💰", cap: null, mod: () => import("./pages/budget.js") },
-  { id: "vacancies", title: "Vacancies", icon: "🪑", cap: null, mod: () => import("./pages/vacancies.js") },
-  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, mod: () => import("./pages/recruitment.js") },
-  { id: "leaves", title: "Leaves", icon: "🌴", cap: null, mod: () => import("./pages/leaves.js") },
-  { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, mod: () => import("./pages/overtime.js") },
-  { id: "attrition", title: "Attrition", icon: "📉", cap: null, mod: () => import("./pages/attrition.js") },
-  { id: "performance", title: "Performance", icon: "🚀", cap: null, mod: () => import("./pages/performance.js") },
-  { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", mod: () => import("./pages/reports.js") },
-  { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", mod: () => import("./pages/email.js") },
-  { id: "notifications", title: "Notifications", icon: "🔔", cap: null, mod: () => import("./pages/notifications.js") },
-  { id: "analytics", title: "Analytics", icon: "📈", cap: null, mod: () => import("./pages/analytics.js") },
-  { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", mod: () => import("./pages/settings.js") },
-  { id: "profile", title: "Profile", icon: "👤", cap: null, mod: () => import("./pages/profile.js") },
+  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, group: "Overview", mod: () => import("./pages/dashboard.js") },
+  { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, group: "Attendance & Data", mod: () => import("./pages/attendance.js") },
+  { id: "uploads", title: "Data Upload", icon: "⬆️", cap: "upload_attendance", group: "Attendance & Data", mod: () => import("./pages/uploads.js") },
+  { id: "employees", title: "Employees", icon: "👥", cap: null, group: "People", mod: () => import("./pages/employees.js") },
+  { id: "departments", title: "Departments", icon: "🏭", cap: null, group: "People", mod: () => import("./pages/departments.js") },
+  { id: "budget", title: "Budget", icon: "💰", cap: null, group: "Planning", mod: () => import("./pages/budget.js") },
+  { id: "vacancies", title: "Vacancies", icon: "🪑", cap: null, group: "Planning", mod: () => import("./pages/vacancies.js") },
+  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, group: "Planning", mod: () => import("./pages/recruitment.js") },
+  { id: "leaves", title: "Leaves", icon: "🌴", cap: null, group: "HR Operations", mod: () => import("./pages/leaves.js") },
+  { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, group: "HR Operations", mod: () => import("./pages/overtime.js") },
+  { id: "attrition", title: "Attrition", icon: "📉", cap: null, group: "HR Operations", mod: () => import("./pages/attrition.js") },
+  { id: "performance", title: "Performance", icon: "🚀", cap: null, group: "HR Operations", mod: () => import("./pages/performance.js") },
+  { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", group: "Insights", mod: () => import("./pages/reports.js") },
+  { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", group: "Insights", mod: () => import("./pages/email.js") },
+  { id: "notifications", title: "Notifications", icon: "🔔", cap: null, group: "Insights", mod: () => import("./pages/notifications.js") },
+  { id: "analytics", title: "Analytics", icon: "📈", cap: null, group: "Insights", mod: () => import("./pages/analytics.js") },
+  { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", group: "Admin", mod: () => import("./pages/settings.js") },
+  { id: "profile", title: "Profile", icon: "👤", cap: null, group: "Admin", mod: () => import("./pages/profile.js") },
 ];
 
 let current = null;
 
-/** Build sidebar links for the signed-in user's role. */
+/** Build sidebar links for the signed-in user's role, grouped under section labels. */
 export function buildSidebar() {
   const nav = document.getElementById("sidebar-nav");
   nav.replaceChildren();
+  let lastGroup = null;
   for (const p of PAGES) {
     if (p.cap && !can(p.cap)) continue;
+    if (p.group !== lastGroup) {
+      nav.append(el("div", { class: "nav-section-label" }, p.group));
+      lastGroup = p.group;
+    }
     nav.append(el("button", {
-      class: "nav-item", "data-page": p.id,
+      class: "nav-item", "data-page": p.id, title: p.title,
       onclick: () => { location.hash = `#/${p.id}`; },
     },
       el("span", { class: "nav-icon" }, p.icon),

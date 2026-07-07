@@ -268,6 +268,9 @@ export function budgetStats(budgetMonthObj, employees) {
       utilization,
       tone: utilization > 100 ? "bad" : utilization >= 90 ? "ok" : utilization >= 70 ? "warn" : "bad",
       sections: budgetMonthObj?.[label]?.sections || null,
+      designations: budgetMonthObj?.[label]?.designations || null,
+      categories: budgetMonthObj?.[label]?.categories || null,
+      localExpat: budgetMonthObj?.[label]?.localExpat || null,
     });
   }
   return rows.sort((a, b) => b.budget - a.budget);

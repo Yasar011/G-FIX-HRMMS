@@ -30,6 +30,24 @@ function deptSelect(departments, current) {
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
+/**
+ * Small card listing a budget breakdown (designation / category / local-expat)
+ * sorted by count descending. Only populated when the budget was imported
+ * from a wide multi-month HRIS export — the simple Department|Budget
+ * template has no such detail, so an empty state points users at what to
+ * upload instead of showing a broken/empty table.
+ */
+function breakdownCard(title, icon, items) {
+  const sorted = (items || []).slice().sort((a, b) => b.count - a.count);
+  return el("div", { class: "card" },
+    el("div", { class: "card-head" }, el("h4", {}, `${icon} ${title}`)),
+    sorted.length
+      ? el("div", {}, ...sorted.map((it) => el("div", { class: "stat-row" },
+          el("span", {}, it.name), el("strong", {}, fmtNum(it.count)))))
+      : el("p", { class: "muted", style: { fontSize: "12.5px" } },
+          "No breakdown for this month — upload a detailed multi-month budget export to see this."));
+}
+
 export async function render(root, params = []) {
   const dept = params[0] ? decodeURIComponent(params[0]) : null;
   const scope = deptScope();
@@ -114,6 +132,7 @@ function renderDetail(root, dept) {
   const trendChart = chartCard({ title: "Daily Attendance (30 days)", type: "line", datasets: [] });
   const secChart = chartCard({ title: "Section Attendance %", type: "bar", options: { indexAxis: "y", scales: { x: { max: 100, beginAtZero: true } } }, datasets: [] });
   const selectHost = el("div");
+  const budgetBreakdownHost = el("div", { class: "grid grid-3" });
   const absenteeHost = el("div");
   const tableHost = el("div");
 
@@ -124,6 +143,8 @@ function renderDetail(root, dept) {
       el("div", { class: "spacer" }),
       selectHost),
     kpis,
+    el("div", { class: "section-label" }, `Detailed Budget — ${month}`),
+    budgetBreakdownHost,
     el("div", { class: "grid grid-2" }, trendChart, secChart),
     absenteeHost,
     tableHost);
@@ -159,6 +180,11 @@ function renderDetail(root, dept) {
       workHrs: workDays ? (workMin / 60) / workDays : 0,
       efficiency,
     });
+
+    budgetBreakdownHost.replaceChildren(
+      breakdownCard("Budget by Designation", "🧾", b?.designations),
+      breakdownCard("Budget by Category", "🏷️", b?.categories),
+      breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat));
 
     // Daily trend scoped to this department
     const scoped = members;
