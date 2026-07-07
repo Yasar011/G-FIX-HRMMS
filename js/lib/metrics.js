@@ -240,25 +240,34 @@ export function attritionStats(attritionObj, employees) {
 /* =============== Budget =============== */
 
 /**
- * Budget vs actual per department for a month.
+ * Budget vs actual per department for a month. Department names are joined
+ * case/whitespace-insensitively (real exports routinely differ only in
+ * casing, e.g. "Training school" vs "Training School") so budget and actual
+ * don't silently split into two separate rows over a typo-level difference.
  * @returns [{department, budget, actual, variance, utilization, tone}]
  */
 export function budgetStats(budgetMonthObj, employees) {
-  const actualBy = groupBy(activeEmps(employees), (e) => e.department || "—");
+  const normKey = (s) => String(s ?? "—").trim().toLowerCase();
+  const actualByNorm = groupBy(activeEmps(employees), (e) => normKey(e.department));
+  // Prefer the budget file's casing for the display label; fall back to the
+  // employee register's casing when a department has no budget entry at all.
+  const labelByNorm = new Map();
+  for (const d of Object.keys(budgetMonthObj || {})) labelByNorm.set(normKey(d), d);
+  for (const [nk, members] of actualByNorm) if (!labelByNorm.has(nk)) labelByNorm.set(nk, members[0]?.department || nk);
+
   const rows = [];
-  const depts = new Set([...Object.keys(budgetMonthObj || {}), ...actualBy.keys()]);
-  for (const d of depts) {
-    const budget = Number(budgetMonthObj?.[d]?.total) || 0;
-    const actual = (actualBy.get(d) || []).length;
+  for (const [nk, label] of labelByNorm) {
+    const budget = Number(budgetMonthObj?.[label]?.total) || 0;
+    const actual = (actualByNorm.get(nk) || []).length;
     const utilization = budget ? (actual / budget) * 100 : (actual ? 999 : 0);
     rows.push({
-      department: d, budget, actual,
+      department: label, budget, actual,
       variance: actual - budget,
       vacancies: Math.max(0, budget - actual),
       excess: Math.max(0, actual - budget),
       utilization,
       tone: utilization > 100 ? "bad" : utilization >= 90 ? "ok" : utilization >= 70 ? "warn" : "bad",
-      sections: budgetMonthObj?.[d]?.sections || null,
+      sections: budgetMonthObj?.[label]?.sections || null,
     });
   }
   return rows.sort((a, b) => b.budget - a.budget);
