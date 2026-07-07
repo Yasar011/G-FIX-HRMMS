@@ -2,7 +2,7 @@
  * Profile page — the signed-in user's own account: display name, avatar
  * (Firebase Storage), password change, theme preference, session info.
  */
-import { currentUser, ROLES, updateUserProfile, logout } from "../lib/auth.js";
+import { currentUser, roleLabel, updateUserProfile, logout } from "../lib/auth.js";
 import { auth, updateProfile, updatePassword, storage, sRef, uploadBytes, getDownloadURL } from "../lib/firebase.js";
 import { toast } from "../lib/ui.js";
 import { statRow } from "../components/kpi.js";
@@ -41,7 +41,7 @@ export async function render(root) {
         el("h3", {}, u.name || u.email),
         el("p", { class: "muted" }, u.email),
         el("div", { class: "profile-meta" },
-          el("span", { class: "chip" }, ROLES[u.role] || u.role),
+          el("span", { class: "chip" }, roleLabel(u.role)),
           u.department ? el("span", { class: "chip" }, u.department) : null)),
       el("div", {}, photoInput,
         el("button", { class: "btn btn-sm", onclick: () => photoInput.click() }, "📷 Change photo"))),
@@ -79,7 +79,7 @@ export async function render(root) {
 
       el("div", { class: "card" },
         el("div", { class: "card-head" }, el("h4", {}, "Session & preferences")),
-        statRow("Role", ROLES[u.role] || u.role),
+        statRow("Role", roleLabel(u.role)),
         statRow("Department scope", u.department || "All"),
         statRow("Account created", u.createdAt ? timeAgo(u.createdAt) : "—"),
         el("div", { class: "stat-row" },

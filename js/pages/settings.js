@@ -3,7 +3,7 @@
  * management, sample-data seeder.
  */
 import { pageWatch, dbUpdate } from "../lib/store.js";
-import { can, ROLES, currentUser } from "../lib/auth.js";
+import { can, ROLES, roleLabel, canonicalRole, currentUser } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { el, toList, timeAgo, uniq } from "../lib/utils.js";
@@ -116,7 +116,7 @@ export async function render(root) {
       columns: [
         { key: "name", label: "Name" },
         { key: "email", label: "Email" },
-        { key: "role", label: "Role", render: (r) => badge(ROLES[r.role] || r.role, r.role === "hr_admin" ? "bad" : r.role === "management" ? "dim" : "info"), exportVal: (r) => ROLES[r.role] || r.role },
+        { key: "role", label: "Role", render: (r) => badge(roleLabel(r.role), canonicalRole(r.role) === "hr_admin" ? "bad" : canonicalRole(r.role) === "management" ? "dim" : "info"), exportVal: (r) => roleLabel(r.role) },
         { key: "department", label: "Department (for Dept. Managers)" },
         { key: "createdAt", label: "Joined", render: (r) => timeAgo(r.createdAt), exportVal: (r) => r.createdAt ? new Date(r.createdAt).toISOString() : "" },
         {
@@ -132,7 +132,7 @@ export async function render(root) {
   /** Role/department editor for a user account. */
   function editUser(user) {
     const roleSel = el("select", {}, ...Object.entries(ROLES).map(([v, l]) => el("option", { value: v }, l)));
-    roleSel.value = user.role || "management";
+    roleSel.value = canonicalRole(user.role) || "management";
     const deptInput = el("input", { type: "text", value: user.department || "", list: "set-depts" });
     const dl = el("datalist", { id: "set-depts" },
       ...uniq(activeEmps(empList(getCached("employees"))), (e) => e.department).map((d) => el("option", { value: d })));

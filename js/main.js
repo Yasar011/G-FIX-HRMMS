@@ -2,7 +2,7 @@
  * App entry point: theme, auth flow, shell wiring (sidebar, search, shortcuts).
  */
 import { isConfigPlaceholder } from "./lib/firebase.js";
-import { initAuth, login, register, logout, currentUser, ROLES } from "./lib/auth.js";
+import { initAuth, login, register, logout, currentUser, roleLabel } from "./lib/auth.js";
 import { initTheme, toast, modal } from "./lib/ui.js";
 import { initRouter, route, buildSidebar } from "./router.js";
 import { initNotifications } from "./lib/notify.js";
@@ -40,7 +40,7 @@ function onAuthChanged(user) {
 
   // Topbar identity
   $("user-name").textContent = user.name || user.email;
-  $("user-role").textContent = ROLES[user.role] || user.role;
+  $("user-role").textContent = roleLabel(user.role);
   const av = $("user-avatar");
   if (user.photo) av.innerHTML = `<img src="${esc(user.photo)}" alt="">`;
   else av.textContent = initials(user.name || user.email);

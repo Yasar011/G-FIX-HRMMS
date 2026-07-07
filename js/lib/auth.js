@@ -43,6 +43,23 @@ const CAPABILITIES = {
   seed_data: ["hr_admin"],
 };
 
+/**
+ * Legacy / alternate role names mapped to canonical roles, so accounts created
+ * under the old scheme (superadmin/editor/viewer) keep working.
+ */
+const LEGACY_ROLES = {
+  superadmin: "hr_admin", super_admin: "hr_admin", admin: "hr_admin",
+  editor: "hr_executive", executive: "hr_executive",
+  viewer: "management", user: "management",
+  manager: "dept_manager",
+};
+
+/** Resolve any stored role string to one of the four canonical roles. */
+export function canonicalRole(role) { return LEGACY_ROLES[role] || role; }
+
+/** Human label for any role (canonical or legacy). */
+export function roleLabel(role) { return ROLES[canonicalRole(role)] || role || "—"; }
+
 /** Current signed-in user: { uid, email, name, role, department, photo }. */
 export let currentUser = null;
 
@@ -106,12 +123,12 @@ export function logout() { return signOut(auth); }
 /** Whether the current user can perform `action` (see CAPABILITIES). */
 export function can(action) {
   if (!currentUser) return false;
-  return (CAPABILITIES[action] || []).includes(currentUser.role);
+  return (CAPABILITIES[action] || []).includes(canonicalRole(currentUser.role));
 }
 
 /** True when the user is scoped to a single department (dept managers). */
 export function deptScope() {
-  return currentUser?.role === "dept_manager" && currentUser.department
+  return canonicalRole(currentUser?.role) === "dept_manager" && currentUser.department
     ? currentUser.department : null;
 }
 

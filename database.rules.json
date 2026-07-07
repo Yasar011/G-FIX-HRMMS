@@ -7,70 +7,70 @@
       ".read": "auth != null",
       "$uid": {
         "role": {
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || ($uid === auth.uid && !data.exists() && ((!root.child('users').exists() && newData.val() === 'hr_admin') || newData.val() === 'management')))"
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/) || ($uid === auth.uid && !data.exists() && ((!root.child('users').exists() && newData.val() === 'hr_admin') || newData.val() === 'management')))"
         },
         "department": {
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || ($uid === auth.uid && !data.exists()))"
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/) || ($uid === auth.uid && !data.exists()))"
         },
         "$other": {
-          ".write": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'hr_admin')"
+          ".write": "auth != null && ($uid === auth.uid || root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/))"
         }
       }
     },
 
     "employees": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "attendance": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive' || root.child('users').child(auth.uid).child('role').val() === 'dept_manager')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor|dept_manager|manager)$/)"
     },
 
     "budget": {
       ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'hr_admin'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
     "attrition": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "leaves": {
       ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').exists() && root.child('users').child(auth.uid).child('role').val() !== 'management'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor|dept_manager|manager)$/)"
     },
 
     "vacancies": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "recruitment": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "settings": {
       ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'hr_admin'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
     "emailAutomation": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "emailLogs": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "uploads": {
       ".read": "auth != null",
-      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'hr_admin' || root.child('users').child(auth.uid).child('role').val() === 'hr_executive')"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "notifications": {
