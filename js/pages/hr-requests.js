@@ -1,8 +1,8 @@
 /**
  * HR Visit Requests — two-way "come see us" workflow between employees and HR.
  *
- *  - Employee-initiated: submitted anonymously via the public kiosk
- *    (hr-request.html), no login required.
+ *  - Employee-initiated: submitted anonymously via the public Employee
+ *    Portal (employee-portal.html), no login required.
  *  - HR-initiated: HR staff can also ask a specific employee to come in,
  *    creating a request the same way (so both directions live in one list).
  *

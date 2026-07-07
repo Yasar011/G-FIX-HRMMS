@@ -72,20 +72,20 @@ export async function render(root) {
       },
     }, "Save EmailJS settings"));
 
-  /* ---------- HR visit request kiosk ---------- */
-  const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/hr-request.html`;
+  /* ---------- Employee Portal kiosk ---------- */
+  const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
   const hrReqToggle = el("input", {
     type: "checkbox",
     onchange: async () => {
       await dbUpdate("settings", { hrRequestEnabled: hrReqToggle.checked });
-      toast(hrReqToggle.checked ? "Public HR request link enabled" : "Public HR request link disabled", "ok");
+      toast(hrReqToggle.checked ? "'Visit HR' option enabled" : "'Visit HR' option disabled", "ok");
     },
   });
   const hrReqCard = el("div", { class: "card" },
-    el("div", { class: "card-head" }, el("h4", {}, "🙋 HR Visit Request Kiosk")),
+    el("div", { class: "card-head" }, el("h4", {}, "🙋 Employee Portal")),
     el("p", { class: "muted", style: { fontSize: "13px", marginBottom: "10px" } },
-      "A public, no-login page where any employee can look themselves up by Employee ID and submit a reason to visit HR. Only their name and department are ever exposed to it — never phone, email, salary, etc. Requires Anonymous sign-in enabled in Firebase Console → Authentication → Sign-in method."),
-    el("label", { class: "inline", style: { marginBottom: "14px" } }, hrReqToggle, "Enable the public request link"),
+      "A public, no-login page where any employee can look themselves up by Employee ID to request leave, check their own leave status (with a downloadable approved-leave certificate), and request to visit HR. Only their name and department are ever exposed to it — never phone, email, salary, etc. The toggle below controls the \"Visit HR\" option only; leave requests are always available. Requires Anonymous sign-in enabled in Firebase Console → Authentication → Sign-in method."),
+    el("label", { class: "inline", style: { marginBottom: "14px" } }, hrReqToggle, "Enable the 'Visit HR' option"),
     el("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
       el("input", { type: "text", value: kioskLink, readonly: "", style: { flex: 1, minWidth: "220px", fontSize: "12.5px" } }),
       el("button", {
@@ -93,7 +93,7 @@ export async function render(root) {
         onclick: () => { navigator.clipboard?.writeText(kioskLink); toast("Link copied", "ok"); },
       }, "📋 Copy link")),
     el("p", { class: "muted", style: { fontSize: "12px", marginTop: "8px" } },
-      "Submitted requests show up under HR Visit Requests in the sidebar."));
+      "Leave requests show up under Leaves, HR visit requests show up under HR Visit Requests, both in the sidebar."));
 
   /* ---------- users & roles ---------- */
   const usersHost = el("div");

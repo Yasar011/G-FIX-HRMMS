@@ -18,7 +18,7 @@
  */
 import { auth, db, signInAnonymously, onAuthStateChanged, ref, get, push, set, serverTimestamp } from "./lib/firebase.js";
 import { toast } from "./lib/ui.js";
-import { initials, fmtDate, el, dateRange } from "./lib/utils.js";
+import { initials, fmtDate, el, dateRange, today } from "./lib/utils.js";
 
 const $ = (id) => document.getElementById(id);
 const steps = ["loading", "id", "confirm", "menu", "leave-form", "hr-form", "success"];
@@ -232,7 +232,7 @@ async function loadLeaves() {
 
 function resetLeaveForm() {
   $("lv-type").value = "Annual";
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = today();
   $("lv-from").value = todayStr;
   $("lv-to").value = todayStr;
   $("lv-half").checked = false;

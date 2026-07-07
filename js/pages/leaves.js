@@ -2,7 +2,7 @@
  * Leaves module — apply, approve/reject (role-gated), leave analysis chart,
  * automatic attendance marking for approved leave days.
  */
-import { pageWatchAll, dbPush, dbSet, dbUpdate, dbRemove } from "../lib/store.js";
+import { pageWatchAll, dbPush, dbSet, dbUpdate } from "../lib/store.js";
 import { can, deptScope, currentUser } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
