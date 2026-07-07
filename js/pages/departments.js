@@ -5,16 +5,28 @@
  *        #/departments/{name}   → department detail page with KPIs + charts
  */
 import { pageWatchAll } from "../lib/store.js";
-import { el, esc, ym, fmtPct, fmtNum, groupBy, toList, lastMonths, fmtMonth, sum } from "../lib/utils.js";
+import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth, sum } from "../lib/utils.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
 import { dataTable } from "../components/table.js";
-import { emptyState, progressBar } from "../lib/ui.js";
+import { emptyState, progressBar, badge } from "../lib/ui.js";
 import {
   empList, activeEmps, employeeAttendance, monthDates, groupAttendance,
-  budgetStats, dailyTrend, dayStats,
+  budgetStats, dailyTrend, dayStats, absenteeStats,
 } from "../lib/metrics.js";
 import { deptScope } from "../lib/auth.js";
+
+/** Department-jump dropdown, shared by overview and detail. Navigates on change. */
+function deptSelect(departments, current) {
+  const sel = el("select", {
+    style: { minWidth: "200px" },
+    onchange: (e) => { if (e.target.value) location.hash = `#/departments/${encodeURIComponent(e.target.value)}`; },
+  },
+    el("option", { value: "" }, "Jump to department…"),
+    ...departments.map((d) => el("option", { value: d, selected: d === current ? "" : null }, d)));
+  if (current) sel.value = current;
+  return el("label", { class: "field", style: { margin: 0, minWidth: "220px" } }, el("span", {}, "Department"), sel);
+}
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
@@ -30,8 +42,11 @@ export async function render(root, params = []) {
 
 function renderOverview(root) {
   const month = ym();
+  const selectHost = el("div");
   const host = el("div", { class: "grid grid-3" });
-  root.append(el("div", { class: "page-head" }, el("h3", {}, "Departments")), host);
+  root.append(
+    el("div", { class: "page-head" }, el("h3", {}, "Departments"), el("div", { class: "spacer" }), selectHost),
+    host);
 
   pageWatchAll(["employees", "attendance", `budget/${month}`, "attrition"], (data) => {
     const employees = empList(data.employees);
@@ -40,6 +55,7 @@ function renderOverview(root) {
     const budget = budgetStats(data[`budget/${month}`], employees);
     const attrition = toList(data.attrition, "_key");
     const groups = groupBy(activeEmps(employees), (e) => e.department || "—");
+    selectHost.replaceChildren(deptSelect([...groups.keys()].sort(), null));
 
     if (!groups.size) {
       host.replaceChildren(emptyState("🏭", "No departments yet", "Add employees with a department to see them here."));
@@ -97,14 +113,19 @@ function renderDetail(root, dept) {
 
   const trendChart = chartCard({ title: "Daily Attendance (30 days)", type: "line", datasets: [] });
   const secChart = chartCard({ title: "Section Attendance %", type: "bar", options: { indexAxis: "y", scales: { x: { max: 100, beginAtZero: true } } }, datasets: [] });
+  const selectHost = el("div");
+  const absenteeHost = el("div");
   const tableHost = el("div");
 
   root.append(
     el("div", { class: "page-head" },
       el("button", { class: "btn btn-ghost", onclick: () => { location.hash = "#/departments"; } }, "← All departments"),
-      el("h3", {}, `🏭 ${dept}`)),
+      el("h3", {}, `🏭 ${dept}`),
+      el("div", { class: "spacer" }),
+      selectHost),
     kpis,
     el("div", { class: "grid grid-2" }, trendChart, secChart),
+    absenteeHost,
     tableHost);
 
   pageWatchAll(["employees", "attendance", `budget/${month}`, "attrition", "leaves"], (data) => {
@@ -112,6 +133,7 @@ function renderDetail(root, dept) {
     const members = activeEmps(all).filter((e) => e.department === dept);
     const attendance = data.attendance || {};
     const dates = monthDates(attendance, month);
+    selectHost.replaceChildren(deptSelect(uniq(activeEmps(all), (e) => e.department), dept));
 
     let present = 0, marked = 0, late = 0, ot = 0, leave = 0, workMin = 0, workDays = 0;
     const perEmp = members.map((e) => {
@@ -156,6 +178,24 @@ function renderDetail(root, dept) {
     secChart._update(bySection.map((s) => s.name), [
       { label: "Attendance %", data: bySection.map((s) => Number(s.attendancePct.toFixed(1))), perBarColor: true },
     ]);
+
+    // Top 3 frequent absentees within this department, this month.
+    const top3 = absenteeStats(attendance, members, month).filter((a) => a.absents > 0).slice(0, 3);
+    absenteeHost.replaceChildren(el("div", { class: "card" },
+      el("div", { class: "card-head" },
+        el("h4", {}, "🚫 Top 3 Frequent Absentees"),
+        el("div", { class: "spacer" }),
+        el("small", { class: "muted" }, month)),
+      top3.length
+        ? el("div", {}, ...top3.map((a, i) => el("div", { class: "stat-row" },
+            el("span", {},
+              el("strong", {}, `${i + 1}. `),
+              el("a", { href: `#/employees/${encodeURIComponent(a.id)}` }, a.name),
+              el("small", { class: "muted" }, ` · ${a.section || "—"}`)),
+            el("span", { style: { display: "flex", gap: "8px", alignItems: "center" } },
+              a.streak > 1 ? badge(`${a.streak} in a row`, "warn") : null,
+              badge(`${a.absents} absent`, "bad")))))
+        : emptyState("✅", "No absences this month", "Nobody in this department has been marked absent yet.")));
 
     tableHost.replaceChildren(dataTable({
       title: `Team — ${dept}`,
