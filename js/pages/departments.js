@@ -4,7 +4,7 @@
  * Route: #/departments          → overview cards (one per department)
  *        #/departments/{name}   → department detail page with KPIs + charts
  */
-import { pageWatchAll } from "../lib/store.js";
+import { pageWatch, pageWatchAll } from "../lib/store.js";
 import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth, sum } from "../lib/utils.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
@@ -30,22 +30,76 @@ function deptSelect(departments, current) {
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
+/** Case/whitespace-insensitive name key, matching the budgetStats() department join. */
+function normName(s) { return String(s ?? "").trim().toLowerCase(); }
+
+/** Count department members by a selector (designation, nationality, …), keyed normalized. */
+function actualCountsBy(members, sel) {
+  const map = new Map();
+  for (const e of members) {
+    const v = sel(e);
+    if (!v) continue;
+    const k = normName(v);
+    map.set(k, (map.get(k) || 0) + 1);
+  }
+  return map;
+}
+
 /**
  * Small card listing a budget breakdown (designation / category / local-expat)
- * sorted by count descending. Only populated when the budget was imported
- * from a wide multi-month HRIS export — the simple Department|Budget
+ * sorted by budget count descending. Only populated when the budget was
+ * imported from a wide multi-month HRIS export — the simple Department|Budget
  * template has no such detail, so an empty state points users at what to
  * upload instead of showing a broken/empty table.
+ *
+ * @param {Array<{name,count}>|null} budgetItems  from budgetStats()'s per-dimension breakdown
+ * @param {Map<string,number>|null} actualMap  normalized-name → actual headcount, or null when
+ *   there's no comparable field on the employee record (shows budget-only with a note)
  */
-function breakdownCard(title, icon, items) {
-  const sorted = (items || []).slice().sort((a, b) => b.count - a.count);
+const MIN_MATCH_RATE = 0.3; // below this, the two files' naming is too different to compare honestly
+
+function breakdownCard(title, icon, budgetItems, actualMap = null, noCompareNote = "") {
+  const items = (budgetItems || []).slice().sort((a, b) => b.count - a.count);
+  let showActual = !!actualMap;
+  let note = noCompareNote;
+
+  let rows = items.map((it) => ({ name: it.name, budget: it.count, actual: actualMap ? (actualMap.get(normName(it.name)) || 0) : null }));
+
+  if (actualMap) {
+    const totalActual = sum([...actualMap.values()]);
+    const matchedActual = sum(rows, (r) => r.actual);
+    const matchRate = totalActual ? matchedActual / totalActual : 1;
+    if (totalActual > 0 && matchRate < MIN_MATCH_RATE) {
+      // Names don't align between the two files enough to compare honestly —
+      // fall back to budget-only rather than show a wall of false zeros.
+      showActual = false;
+      rows = items.map((it) => ({ name: it.name, budget: it.count, actual: null }));
+      note = `Actual headcount isn't shown — the names in your attendance and budget files don't match closely enough to compare (only ${Math.round(matchRate * 100)}% matched).`;
+    } else {
+      // Any actual headcount that doesn't match a budgeted name — surface it
+      // as a rollup row rather than silently dropping real people.
+      const unmatchedTotal = totalActual - matchedActual;
+      if (unmatchedTotal) rows.push({ name: "Other (not in budget file)", budget: 0, actual: unmatchedTotal, dim: true });
+    }
+  }
+
   return el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h4", {}, `${icon} ${title}`)),
-    sorted.length
-      ? el("div", {}, ...sorted.map((it) => el("div", { class: "stat-row" },
-          el("span", {}, it.name), el("strong", {}, fmtNum(it.count)))))
+    rows.length
+      ? el("div", {},
+          showActual ? el("div", { class: "stat-row", style: { fontSize: "11px" } },
+            el("span", { class: "muted" }, "Role"),
+            el("span", { class: "muted", style: { display: "flex", gap: "14px" } }, el("span", {}, "Budget"), el("span", {}, "Actual"))) : null,
+          ...rows.map((r) => el("div", { class: "stat-row" },
+            el("span", { class: r.dim ? "muted" : "" }, r.name),
+            showActual
+              ? el("span", { style: { display: "flex", gap: "14px", minWidth: "90px", justifyContent: "flex-end" } },
+                  el("span", {}, fmtNum(r.budget)),
+                  el("strong", { class: r.actual > r.budget ? "text-bad" : r.actual < r.budget ? "text-warn" : "text-ok" }, fmtNum(r.actual)))
+              : el("strong", {}, fmtNum(r.budget)))))
       : el("p", { class: "muted", style: { fontSize: "12.5px" } },
-          "No breakdown for this month — upload a detailed multi-month budget export to see this."));
+          "No breakdown for this month — upload a detailed multi-month budget export to see this."),
+    note ? el("p", { class: "muted", style: { fontSize: "11.5px", marginTop: "10px" } }, note) : null);
 }
 
 export async function render(root, params = []) {
@@ -113,7 +167,7 @@ function renderOverview(root) {
 /* ================= Detail ================= */
 
 function renderDetail(root, dept) {
-  const month = ym();
+  let month = ym();
 
   const kpis = kpiGrid([
     { id: "headcount", label: "Current Headcount", icon: "👥", color: C.brand },
@@ -132,24 +186,41 @@ function renderDetail(root, dept) {
   const trendChart = chartCard({ title: "Daily Attendance (30 days)", type: "line", datasets: [] });
   const secChart = chartCard({ title: "Section Attendance %", type: "bar", options: { indexAxis: "y", scales: { x: { max: 100, beginAtZero: true } } }, datasets: [] });
   const selectHost = el("div");
+  const budgetLabel = el("div", { class: "section-label" }, `Detailed Budget — ${month}`);
   const budgetBreakdownHost = el("div", { class: "grid grid-3" });
   const absenteeHost = el("div");
   const tableHost = el("div");
+  const monthInput = el("input", { type: "month", value: month, onchange: (e) => { month = e.target.value; watchBudgetMonth(); refresh(); } });
 
   root.append(
     el("div", { class: "page-head" },
       el("button", { class: "btn btn-ghost", onclick: () => { location.hash = "#/departments"; } }, "← All departments"),
       el("h3", {}, `🏭 ${dept}`),
       el("div", { class: "spacer" }),
+      el("label", { class: "field", style: { margin: 0 } }, el("span", {}, "Budget month"), monthInput),
       selectHost),
     kpis,
-    el("div", { class: "section-label" }, `Detailed Budget — ${month}`),
+    budgetLabel,
     budgetBreakdownHost,
     el("div", { class: "grid grid-2" }, trendChart, secChart),
     absenteeHost,
     tableHost);
 
-  pageWatchAll(["employees", "attendance", `budget/${month}`, "attrition", "leaves"], (data) => {
+  let cache = null; // {employees, attendance, attrition, leaves} — stable paths, independent of the month picker
+  let budgetMonthObj = null;
+  let unwatchBudget = null;
+
+  function watchBudgetMonth() {
+    unwatchBudget?.();
+    unwatchBudget = pageWatch(`budget/${month}`, (v) => { budgetMonthObj = v; refresh(); });
+  }
+  watchBudgetMonth();
+  pageWatchAll(["employees", "attendance", "attrition", "leaves"], (data) => { cache = data; refresh(); });
+
+  function refresh() {
+    if (!cache) return;
+    const data = cache;
+    budgetLabel.textContent = `Detailed Budget — ${month}`;
     const all = empList(data.employees);
     const members = activeEmps(all).filter((e) => e.department === dept);
     const attendance = data.attendance || {};
@@ -165,7 +236,7 @@ function renderDetail(root, dept) {
     });
     const attPct = marked ? (present / marked) * 100 : 0;
     const latePct = marked ? (late / marked) * 100 : 0;
-    const b = budgetStats(data[`budget/${month}`], all).find((x) => x.department === dept);
+    const b = budgetStats(budgetMonthObj, all).find((x) => x.department === dept);
     const joined = all.filter((e) => e.department === dept && e.doj?.startsWith(month)).length;
     const left = toList(data.attrition, "_key").filter((a) => a.department === dept && a.lastDay?.startsWith(month)).length;
     // Simple composite score: attendance minus late penalty
@@ -182,9 +253,10 @@ function renderDetail(root, dept) {
     });
 
     budgetBreakdownHost.replaceChildren(
-      breakdownCard("Budget by Designation", "🧾", b?.designations),
-      breakdownCard("Budget by Category", "🏷️", b?.categories),
-      breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat));
+      breakdownCard("Budget by Designation", "🧾", b?.designations, actualCountsBy(members, (e) => e.designation)),
+      breakdownCard("Budget by Category", "🏷️", b?.categories, null,
+        "No comparable field on employee records — this budget file's category (Staff / Associate-Direct / …) doesn't match anything captured from attendance uploads, so only the budgeted split is shown."),
+      breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat, actualCountsBy(members, (e) => e.nationality)));
 
     // Daily trend scoped to this department
     const scoped = members;
@@ -245,5 +317,5 @@ function renderDetail(root, dept) {
       ],
       rows: perEmp,
     }));
-  });
+  }
 }
