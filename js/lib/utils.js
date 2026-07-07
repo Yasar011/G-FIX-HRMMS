@@ -203,6 +203,16 @@ export function uniq(arr, sel = (x) => x) {
   return [...new Set(arr.map(sel).filter((v) => v != null && v !== ""))].sort();
 }
 
+/**
+ * Make free text safe to use as a Realtime Database key. Firebase forbids
+ * ".", "#", "$", "/", "[", "]" in keys — real-world department/designation
+ * names ("Sr. Manager", "QC/QA Officer") routinely contain them.
+ */
+export function sanitizeKey(s) {
+  const clean = String(s ?? "").trim().replace(/[.#$/[\]]/g, "-");
+  return clean || "—";
+}
+
 /** Object → array of {key, ...value} entries (Firebase node → list). */
 export function toList(obj, keyName = "_key") {
   if (!obj) return [];

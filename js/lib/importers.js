@@ -20,7 +20,7 @@
 import { dbUpdate, dbPush, getCached } from "./store.js";
 import { notify } from "./notify.js";
 import { currentUser } from "./auth.js";
-import { ymd, hmToMin, fmtDate, fmtPct } from "./utils.js";
+import { ymd, hmToMin, fmtDate, fmtPct, sanitizeKey } from "./utils.js";
 import { dayStats } from "./metrics.js";
 import { track } from "./firebase.js";
 
@@ -292,14 +292,17 @@ function parseSimpleBudget(raw) {
   for (const row of raw) {
     const norm = {};
     for (const [k, v] of Object.entries(row)) norm[String(k).toLowerCase().replace(/[^a-z]/g, "")] = v;
-    const dept = String(norm.department || norm.dept || "").trim();
+    const dept = sanitizeKey(norm.department || norm.dept || "");
     const total = Number(norm.budget ?? norm.headcount ?? norm.total);
     const section = String(norm.section || "").trim();
-    if (!dept || isNaN(total)) continue;
+    if (dept === "—" || isNaN(total)) continue;
     if (!parsed[dept]) parsed[dept] = { total: 0 };
     if (section) {
-      parsed[dept].sections = parsed[dept].sections || {};
-      parsed[dept].sections[section] = (parsed[dept].sections[section] || 0) + total;
+      // Array, not a keyed object — section names routinely contain "/", ".", etc.
+      // which Firebase forbids in keys.
+      parsed[dept].sections = parsed[dept].sections || [];
+      const existing = parsed[dept].sections.find((s) => s.name === section);
+      if (existing) existing.count += total; else parsed[dept].sections.push({ name: section, count: total });
       parsed[dept].total += total;
     } else parsed[dept].total = total;
   }
@@ -326,17 +329,22 @@ function parseWideBudget(raw) {
   const monthCols = Object.keys(raw[0] || {}).map((key) => ({ key, month: parseMonthHeader(key) })).filter((x) => x.month);
   const months = {};
   for (const row of raw) {
-    const dept = String(row["Department"] || row["Dept"] || "").trim();
+    const dept = sanitizeKey(row["Department"] || row["Dept"] || "");
     const designation = String(row["Unique Designation"] || row["Designation"] || "").trim();
-    if (!dept) continue;
+    if (dept === "—") continue;
     for (const { key, month } of monthCols) {
       const raw_v = row[key];
       const n = raw_v === "-" || raw_v === "" ? 0 : Number(raw_v);
       if (!n || isNaN(n)) continue;
       if (!months[month]) months[month] = {};
-      if (!months[month][dept]) months[month][dept] = { total: 0, designations: {} };
+      if (!months[month][dept]) months[month][dept] = { total: 0, designations: [] };
       months[month][dept].total += n;
-      if (designation) months[month][dept].designations[designation] = (months[month][dept].designations[designation] || 0) + n;
+      if (designation) {
+        // Array, not a keyed object — real designation titles ("Sr. Manager",
+        // "QC/QA Officer") routinely contain characters Firebase forbids in keys.
+        const existing = months[month][dept].designations.find((d) => d.name === designation);
+        if (existing) existing.count += n; else months[month][dept].designations.push({ name: designation, count: n });
+      }
     }
   }
   const monthList = monthCols.map((m) => m.month).sort();

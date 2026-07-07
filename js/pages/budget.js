@@ -17,7 +17,7 @@ import { chartCard } from "../lib/charts.js";
 import { dropZone } from "../components/uploader.js";
 import { readWorkbook, parseBudgetSheet, importBudget, importBudgetWide } from "../lib/importers.js";
 import { notify } from "../lib/notify.js";
-import { el, ym, fmtNum, fmtPct, uniq } from "../lib/utils.js";
+import { el, ym, fmtNum, fmtPct, uniq, sanitizeKey } from "../lib/utils.js";
 import { empList, activeEmps, budgetStats, budgetSummary } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", brand: "#6366f1", violet: "#a78bfa" };
@@ -141,9 +141,9 @@ export async function render(root) {
         {
           label: "Save", class: "btn-primary",
           onClick: async (e, close) => {
-            const d = deptInput.value.trim();
+            const d = sanitizeKey(deptInput.value);
             const total = Number(totalInput.value);
-            if (!d || !(total >= 0)) { toast("Enter a department and a valid number", "warn"); return true; }
+            if (d === "—" || !(total >= 0)) { toast("Enter a department and a valid number", "warn"); return true; }
             await dbUpdate(`budget/${month}/${d}`, { total });
             await maybeAlertExceeded(d, total);
             notify("budget", "Budget updated", `${d}: ${total} for ${month}`);
