@@ -128,7 +128,15 @@ export async function render(root) {
       host.replaceChildren(emptyState("🌡️", "No absences to map"));
       return;
     }
-    const grid = el("div", { class: "heatmap", style: { gridTemplateColumns: `140px repeat(${dates.length}, 1fr)` } });
+    // Fixed-size cells (not 1fr) — with few dates uploaded, 1fr columns would
+    // stretch to fill the card width and, combined with aspect-ratio:1,
+    // produce giant cells. Fixed size + horizontal scroll handles both a
+    // 2-day upload and a full 30-day month correctly.
+    const CELL = 22;
+    const grid = el("div", {
+      class: "heatmap",
+      style: { gridTemplateColumns: `140px repeat(${dates.length}, ${CELL}px)`, width: "max-content" },
+    });
     grid.append(el("div"));
     for (const d of dates) grid.append(el("small", { class: "muted", style: { fontSize: "9px", textAlign: "center" } }, d.slice(8)));
     for (const emp of top.slice(0, 12)) {
@@ -142,7 +150,7 @@ export async function render(root) {
         }));
       }
     }
-    host.replaceChildren(grid,
+    host.replaceChildren(el("div", { class: "table-scroll", style: { maxHeight: "none" } }, grid),
       el("div", { class: "hm-legend" },
         el("i", { style: { background: "var(--surface-2)" } }), "Present/other",
         el("i", { style: { background: "var(--bad)" } }), "Absent"));
