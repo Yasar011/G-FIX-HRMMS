@@ -10,7 +10,7 @@
  */
 import { pageWatch, dbUpdate, dbSet, read } from "../lib/store.js";
 import { can } from "../lib/auth.js";
-import { toast, modal, badge, progressBar, emptyState } from "../lib/ui.js";
+import { toast, modal, badge, progressBar, emptyState, friendlyDbError } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
@@ -210,7 +210,7 @@ export async function render(root) {
               if (parsed.format === "wide") await importBudgetWide(parsed, uploadName);
               else await importBudget(month, parsed.parsed, uploadName);
               toast("Budget imported", "ok");
-            } catch (err) { console.error(err); toast("Import failed — check your permissions", "err"); }
+            } catch (err) { console.error(err); toast(friendlyDbError(err), "err", 8000); }
             close();
           },
         },

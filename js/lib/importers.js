@@ -138,9 +138,21 @@ function looksLikeHrisWorkbook(wb) {
   return false;
 }
 
-/** Column-name → index lookup, case/space-insensitive, from a header row. */
-function colIndex(header, name) {
-  return header.findIndex((h) => String(h).trim().toLowerCase() === name);
+/** Normalize a header cell for fuzzy matching: lowercase, letters only. */
+function normHeader(h) { return String(h).toLowerCase().replace(/[^a-z]/g, ""); }
+
+/**
+ * Column-name → index lookup. Fuzzy: case/space/punctuation-insensitive, and
+ * accepts a list of alias names (real exports vary the exact wording).
+ */
+function colIndex(header, ...aliases) {
+  const normed = header.map(normHeader);
+  for (const alias of aliases) {
+    const target = normHeader(alias);
+    const i = normed.findIndex((h) => h === target);
+    if (i !== -1) return i;
+  }
+  return -1;
 }
 
 /**
@@ -160,13 +172,20 @@ function parseHrisAttendanceWorkbook(wb, year) {
     const m = String(header[dateColIdx]).trim().match(/^(\d{1,2})\/(\d{1,2})/);
     const date = `${year}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
     const idx = {
-      empId: colIndex(header, "emp id"), name: colIndex(header, "name"), team: colIndex(header, "team"),
-      designation: colIndex(header, "designation"), module: colIndex(header, "module"), section: colIndex(header, "section"),
-      buyer: colIndex(header, "buyer division"), doj: colIndex(header, "emp doj"), department: colIndex(header, "department"),
-      category: colIndex(header, "category"), grade: colIndex(header, "grade"),
+      empId: colIndex(header, "emp id", "empid", "employee id", "id", "epf"),
+      name: colIndex(header, "name", "employee name", "emp name"),
+      team: colIndex(header, "team", "shift"),
+      designation: colIndex(header, "designation", "unique designation", "job title", "position"),
+      module: colIndex(header, "module", "line"),
+      section: colIndex(header, "section", "sub section"),
+      buyer: colIndex(header, "buyer division", "buyer", "buyer group"),
+      doj: colIndex(header, "emp doj", "doj", "date of joining", "joining date"),
+      department: colIndex(header, "department", "dept", "department name", "dept name"),
+      category: colIndex(header, "category", "employee category"),
+      grade: colIndex(header, "grade"),
       workHours: dateColIdx + 1, otHours: dateColIdx + 2,
     };
-    if (idx.empId === -1) { out.errors.push(`Sheet "${sheetName}": no "EMP ID" column found`); continue; }
+    if (idx.empId === -1) { out.errors.push(`Sheet "${sheetName}": no "EMP ID" column found — headers were: ${header.join(" | ")}`); continue; }
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];

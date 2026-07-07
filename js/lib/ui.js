@@ -20,6 +20,21 @@ export function toast(msg, type = "info", ms = 3600) {
   return node;
 }
 
+/**
+ * Turn a raw error (often a Firebase RTDB rejection) into a message that
+ * tells the user what to actually do next, instead of a raw SDK string.
+ */
+export function friendlyDbError(e) {
+  const msg = String(e?.message || e || "");
+  if (e?.code === "PERMISSION_DENIED" || /permission_denied|permission denied/i.test(msg)) {
+    const path = msg.match(/at\s+(\/\S+)/)?.[1] || "";
+    return `Permission denied${path ? ` writing to ${path}` : ""} — your account's role doesn't have write access here, `
+      + `or the database rules haven't been published yet. Check Settings → Users & roles, and make sure `
+      + `database.rules.json has been published in the Firebase console.`;
+  }
+  return msg || "Something went wrong.";
+}
+
 /* ---------------- Modals ---------------- */
 
 /**
@@ -45,7 +60,14 @@ export function modal({ title, body, actions = [], width, onClose } = {}) {
       ...actions.map((a) => el("button", {
         class: `btn ${a.class || ""}`,
         onclick: async (e) => {
-          const keep = await a.onClick?.(e, close);
+          let keep;
+          try {
+            keep = await a.onClick?.(e, close);
+          } catch (err) {
+            console.error(err);
+            toast(friendlyDbError(err), "err", 8000);
+            return; // keep the modal open so the user doesn't lose their input
+          }
           if (keep !== true) close();
         },
       }, a.label))));

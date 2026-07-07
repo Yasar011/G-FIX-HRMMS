@@ -13,7 +13,7 @@
  */
 import { pageWatch } from "../lib/store.js";
 import { can } from "../lib/auth.js";
-import { toast, badge, emptyState } from "../lib/ui.js";
+import { toast, badge, emptyState, friendlyDbError } from "../lib/ui.js";
 import { dropZone } from "../components/uploader.js";
 import { dataTable } from "../components/table.js";
 import {
@@ -167,7 +167,7 @@ function uploadCard({ title, icon, subtitle, hint, accept, controls, parseFile, 
       state = null;
     } catch (e) {
       console.error(e);
-      toast("Import failed — check your permissions & rules", "err");
+      toast(friendlyDbError(e), "err", 8000);
     } finally {
       importBtn.textContent = "Import to Firebase";
     }

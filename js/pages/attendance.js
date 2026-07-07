@@ -15,7 +15,7 @@
  */
 import { pageWatch } from "../lib/store.js";
 import { can } from "../lib/auth.js";
-import { toast, modal, badge, statusTone, emptyState } from "../lib/ui.js";
+import { toast, modal, badge, statusTone, emptyState, friendlyDbError } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { filterBar, allOptions } from "../components/filters.js";
 import { kpiGrid } from "../components/kpi.js";
@@ -296,7 +296,7 @@ export async function render(root) {
             try {
               const n = await importAttendance(parsed, { employees, settings });
               toast(`Imported ${n} attendance records`, "ok");
-            } catch (err) { console.error(err); toast("Import failed — check your permissions", "err"); }
+            } catch (err) { console.error(err); toast(friendlyDbError(err), "err", 8000); }
             close();
           },
         },
