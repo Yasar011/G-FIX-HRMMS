@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Check my leave status — Brandix Unit 3" />
+  <title>Check My Leave · Brandix Unit 3</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>" />
+  <link rel="stylesheet" href="css/variables.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <style>
+    /* This page is a single centered card — no sidebar/topbar chrome. */
+    body { overflow-y: auto; min-height: 100vh; }
+    .kiosk-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .kiosk-card { width: min(520px, 100%); padding: 34px 30px; border-radius: var(--r-lg); animation: pop .4s var(--t-med) both; }
+    .kiosk-brand { text-align: center; margin-bottom: 22px; }
+    .kiosk-brand .icon { font-size: 40px; }
+    .kiosk-brand h1 { font-size: 19px; margin-top: 8px; }
+    .kiosk-brand p { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+    .kiosk-step { display: none; }
+    .kiosk-step.active { display: block; animation: fade-up .3s var(--t-med) both; }
+    .confirm-box {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r-md);
+      background: var(--surface); border: 1px solid var(--line); margin-bottom: 16px;
+    }
+    .confirm-box .avatar { width: 46px; height: 46px; font-size: 17px; }
+    .kiosk-error { color: var(--bad); font-size: 13px; margin-top: 6px; min-height: 18px; }
+    .leave-item {
+      padding: 14px 16px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line);
+      margin-bottom: 10px;
+    }
+    .leave-item .row1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .leave-item .muted-line { color: var(--text-dim); font-size: 12.5px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="kiosk-wrap">
+    <div class="kiosk-card glass" id="kiosk-card">
+      <div class="kiosk-brand">
+        <div class="icon">🌴</div>
+        <h1>Check My Leave</h1>
+        <p>Brandix Unit 3 · see your leave status and download approved certificates</p>
+      </div>
+
+      <!-- Loading state -->
+      <div class="kiosk-step active" id="step-loading">
+        <div style="text-align:center; padding: 20px 0;">
+          <div class="spinner" style="margin: 0 auto 14px;"></div>
+          <p class="muted">Connecting…</p>
+        </div>
+      </div>
+
+      <!-- Step 1: enter employee ID -->
+      <div class="kiosk-step" id="step-id">
+        <label class="field">
+          <span>Your Employee ID</span>
+          <input type="text" id="emp-id-input" placeholder="e.g. E10045" autocomplete="off" autocapitalize="characters" />
+        </label>
+        <div class="kiosk-error" id="id-error"></div>
+        <button class="btn btn-primary btn-block" id="lookup-btn">Continue</button>
+      </div>
+
+      <!-- Step 2: confirm identity -->
+      <div class="kiosk-step" id="step-confirm">
+        <p class="muted" style="margin-bottom: 10px; font-size: 13px;">Is this you?</p>
+        <div class="confirm-box">
+          <div class="avatar" id="confirm-avatar">?</div>
+          <div>
+            <strong id="confirm-name">—</strong>
+            <div class="muted" style="font-size: 12.5px;" id="confirm-dept">—</div>
+          </div>
+        </div>
+        <div style="display:flex; gap: 10px;">
+          <button class="btn btn-ghost" style="flex:1" id="not-me-btn">← Not me</button>
+          <button class="btn btn-primary" style="flex:1" id="confirm-btn">Yes, that's me</button>
+        </div>
+      </div>
+
+      <!-- Step 3: leave list -->
+      <div class="kiosk-step" id="step-list">
+        <div class="confirm-box">
+          <div class="avatar" id="list-avatar">?</div>
+          <div>
+            <strong id="list-name">—</strong>
+            <div class="muted" style="font-size: 12.5px;" id="list-dept">—</div>
+          </div>
+        </div>
+        <div id="leave-list"></div>
+        <button class="btn btn-ghost btn-block" id="back-id-btn" style="margin-top: 10px;">← Check a different ID</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast-root" id="toast-root"></div>
+  <script type="module" src="js/leave-status.js"></script>
+</body>
+</html>

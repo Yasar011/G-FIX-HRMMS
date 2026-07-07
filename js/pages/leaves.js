@@ -2,7 +2,7 @@
  * Leaves module — apply, approve/reject (role-gated), leave analysis chart,
  * automatic attendance marking for approved leave days.
  */
-import { pageWatchAll, dbPush, dbUpdate, dbRemove } from "../lib/store.js";
+import { pageWatchAll, dbPush, dbSet, dbUpdate, dbRemove } from "../lib/store.js";
 import { can, deptScope, currentUser } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
@@ -19,6 +19,7 @@ export async function render(root) {
   const approver = can("approve_leaves");
   const scope = deptScope();
   let employees = [];
+  const statusLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/leave-status.html`;
 
   const kpis = kpiGrid([
     { id: "pending", label: "Pending Approval", icon: "⏳", color: C.warn },
@@ -30,12 +31,26 @@ export async function render(root) {
   const trendChart = chartCard({ title: "Leave Days Trend (12 months)", type: "bar", datasets: [] });
   const tableHost = el("div");
 
+  const linkInput = el("input", { type: "text", value: statusLink, readonly: "", style: { flex: 1 } });
+  const linkCard = el("div", { class: "card", style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
+    el("span", { style: { fontSize: "20px" } }, "🔗"),
+    el("div", { style: { flex: 1, minWidth: "220px" } },
+      el("strong", {}, "Public 'Check My Leave' link"),
+      el("p", { class: "muted", style: { fontSize: "12.5px", marginTop: "2px" } },
+        "Share this so employees can check their own leave status and download an approved-leave certificate. No login required.")),
+    linkInput,
+    el("button", {
+      class: "btn btn-sm",
+      onclick: () => { navigator.clipboard?.writeText(statusLink); toast("Link copied", "ok"); },
+    }, "📋 Copy"));
+
   root.append(
     el("div", { class: "page-head" },
       el("h3", {}, "Leave Management"),
       scope ? el("span", { class: "chip" }, `Scope: ${scope}`) : null,
       el("div", { class: "spacer" }),
       el("button", { class: "btn btn-primary", onclick: () => applyLeave() }, "＋ Apply leave")),
+    linkCard,
     kpis,
     el("div", { class: "grid grid-2" }, typeChart, trendChart),
     tableHost);
@@ -101,7 +116,13 @@ export async function render(root) {
   async function decide(leave, status) {
     const span = leave.halfDay ? `${fmtDate(leave.from)} (half day)` : `${fmtDate(leave.from)} → ${fmtDate(leave.to)}`;
     if (!(await confirmDialog(`${status === "approved" ? "Approve" : "Reject"} ${leave.name}'s ${leave.type} leave (${span})?`, { danger: status === "rejected" }))) return;
-    await dbUpdate(`leaves/${leave._key}`, { status, approvedBy: currentUser?.name || "—", decidedAt: Date.now() });
+    const patch = { status, approvedBy: currentUser?.name || "—", decidedAt: Date.now() };
+    // Mirrored into leavesByEmployee/{empId}/{key} so the public "Check My
+    // Leave" kiosk can read its own status without browsing everyone else's.
+    await Promise.all([
+      dbUpdate(`leaves/${leave._key}`, patch),
+      dbUpdate(`leavesByEmployee/${leave.empId}/${leave._key}`, patch),
+    ]);
     if (status === "approved") {
       const updates = {};
       if (leave.halfDay) updates[`${leave.from}/${leave.empId}`] = { status: "HD" };
@@ -162,13 +183,16 @@ export async function render(root) {
             }
             const halfDay = halfDayChk.checked;
             const to = halfDay ? fromInput.value : toInput.value;
-            await dbPush("leaves", {
+            const leaveObj = {
               empId: emp.id, name: emp.name, department: emp.department || "—",
               type: typeSel.value, from: fromInput.value, to,
               days: halfDay ? 0.5 : dateRange(fromInput.value, to).length,
               halfDay,
               reason: reason.value.trim(), status: "pending", appliedAt: Date.now(),
-            });
+            };
+            // Same key mirrored to leavesByEmployee/{empId}/{key} — see decide() above.
+            const pushRef = dbPush("leaves", leaveObj);
+            await Promise.all([pushRef, dbSet(`leavesByEmployee/${emp.id}/${pushRef.key}`, leaveObj)]);
             toast("Leave request submitted", "ok");
             close();
           },
