@@ -248,9 +248,15 @@ export async function importAttendance(parsed, { employees = [], settings = {} }
   // Merge (never overwrite unrelated fields) any employee master data found in the sheet.
   const syncCount = Object.keys(parsed.employeesSync || {}).length;
   if (syncCount) {
+    const existingById = new Map(employees.map((e) => [e.id, e]));
     const empUpdates = {};
     for (const [empId, fields] of Object.entries(parsed.employeesSync)) {
       for (const [k, v] of Object.entries(fields)) if (v !== undefined && v !== "") empUpdates[`${empId}/${k}`] = v;
+      // Employees discovered purely through attendance sync need a status or
+      // they're invisible everywhere (Departments, headcount, budget actuals,
+      // demographics) — activeEmps() only counts active/notice. Never touch
+      // an employee that already has one (e.g. resigned via Attrition).
+      if (!existingById.get(empId)?.status) empUpdates[`${empId}/status`] = "active";
     }
     if (Object.keys(empUpdates).length) await dbUpdate("employees", empUpdates);
   }
