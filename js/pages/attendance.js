@@ -20,7 +20,7 @@ import { dataTable } from "../components/table.js";
 import { filterBar, allOptions } from "../components/filters.js";
 import { kpiGrid } from "../components/kpi.js";
 import { dropZone } from "../components/uploader.js";
-import { readWorkbook, parseAttendanceRows, importAttendance } from "../lib/importers.js";
+import { parseAttendanceWorkbook, importAttendance } from "../lib/importers.js";
 import {
   el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo,
 } from "../lib/utils.js";
@@ -258,28 +258,35 @@ export async function render(root) {
   /* ---------- Excel upload (delegates to shared importer) ---------- */
   function openUpload() {
     const preview = el("div", { style: { marginTop: "14px" } });
+    const yearInput = el("input", { type: "number", value: String(new Date().getFullYear()), min: "2000", max: "2100", style: { width: "90px" } });
     let parsed = null;
 
     const zone = dropZone({
       accept: ".xlsx,.xls,.csv",
-      hint: "Columns: EmpID · Name · Date · Status · In · Out · Shift · OT",
+      hint: "Simple template: EmpID · Name · Date · Status · In · Out · Shift · OT — or a full HRIS export (auto-detected)",
       onFile: async (file) => {
         try {
-          const raw = await readWorkbook(file);
-          parsed = parseAttendanceRows(raw, settings);
+          preview.replaceChildren(el("p", { class: "muted" }, "Reading file…"));
+          parsed = await parseAttendanceWorkbook(file, { settings, year: yearInput.value });
           parsed.fileName = file.name;
+          const syncCount = Object.keys(parsed.employeesSync || {}).length;
           preview.replaceChildren(el("div", { class: "card", style: { padding: "12px 16px" } },
             el("p", { html: `<b>${esc2(file.name)}</b> — ${parsed.records.length} valid rows`
               + ` across <b>${parsed.dates.size}</b> date(s), <b>${parsed.empIds.size}</b> employee(s)`
-              + (parsed.skipped ? ` · <span class="text-warn">${parsed.skipped} rows skipped</span>` : "") })));
-        } catch (err) { console.error(err); toast("Could not read that file", "err"); }
+              + (parsed.skipped ? ` · <span class="text-warn">${parsed.skipped} rows skipped</span>` : "")
+              + (syncCount ? ` · will sync <b>${syncCount}</b> employee profile(s)` : "")
+              + (parsed.errors?.length ? ` · <span class="text-bad">${esc2(parsed.errors[0])}</span>` : "") })));
+        } catch (err) { console.error(err); toast("Could not read that file", "err"); preview.replaceChildren(); }
       },
     });
 
     modal({
       title: "Upload Attendance",
       width: "680px",
-      body: el("div", {}, zone, preview),
+      body: el("div", {},
+        el("label", { class: "field", style: { maxWidth: "160px" } },
+          el("span", {}, "Year (for HRIS exports without a year in the date)"), yearInput),
+        zone, preview),
       actions: [
         { label: "Cancel", class: "btn-ghost", onClick: () => {} },
         {

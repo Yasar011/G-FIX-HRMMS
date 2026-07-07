@@ -15,7 +15,7 @@ import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
 import { dropZone } from "../components/uploader.js";
-import { readWorkbook, parseBudgetRows, importBudget } from "../lib/importers.js";
+import { readWorkbook, parseBudgetSheet, importBudget, importBudgetWide } from "../lib/importers.js";
 import { notify } from "../lib/notify.js";
 import { el, ym, fmtNum, fmtPct, uniq } from "../lib/utils.js";
 import { empList, activeEmps, budgetStats, budgetSummary } from "../lib/metrics.js";
@@ -179,16 +179,19 @@ export async function render(root) {
 
     const zone = dropZone({
       accept: ".xlsx,.xls,.csv",
-      hint: "Columns: Department · Budget · (optional) Section",
+      hint: "Simple template: Department · Budget · (optional) Section — or a wide multi-month export (auto-detected, imports every month found)",
       onFile: async (file) => {
         try {
           uploadName = file.name;
+          preview.replaceChildren(el("p", { class: "muted" }, "Reading file…"));
           const raw = await readWorkbook(file);
-          const res = parseBudgetRows(raw);
-          parsed = res.parsed;
+          parsed = parseBudgetSheet(raw);
+          const summary = parsed.format === "wide"
+            ? `${parsed.monthList.length} months (${parsed.monthList[0]} → ${parsed.monthList[parsed.monthList.length - 1]}) × ${parsed.deptCount} departments — multi-month export detected, importing all months`
+            : `${parsed.deptCount} departments, total budget <b>${fmtNum(parsed.totalBudget)}</b> · month ${month}`;
           preview.replaceChildren(el("div", { class: "card", style: { padding: "12px 16px" } },
-            el("p", { html: `<b>${escB(file.name)}</b> — ${res.deptCount} departments, total budget <b>${fmtNum(res.totalBudget)}</b>` })));
-        } catch (err) { console.error(err); toast("Could not read that file", "err"); }
+            el("p", { html: `<b>${escB(file.name)}</b> — ${summary}` })));
+        } catch (err) { console.error(err); toast("Could not read that file", "err"); preview.replaceChildren(); }
       },
     });
 
@@ -201,9 +204,11 @@ export async function render(root) {
         {
           label: "Import", class: "btn-primary",
           onClick: async (e, close) => {
-            if (!parsed || !Object.keys(parsed).length) { toast("Choose a file first", "warn"); return true; }
+            const hasData = parsed?.format === "wide" ? parsed.deptCount > 0 : Object.keys(parsed?.parsed || {}).length > 0;
+            if (!hasData) { toast("Choose a file first", "warn"); return true; }
             try {
-              await importBudget(month, parsed, uploadName);
+              if (parsed.format === "wide") await importBudgetWide(parsed, uploadName);
+              else await importBudget(month, parsed.parsed, uploadName);
               toast("Budget imported", "ok");
             } catch (err) { console.error(err); toast("Import failed — check your permissions", "err"); }
             close();

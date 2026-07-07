@@ -2,10 +2,20 @@
  * Excel import engine — shared by the Attendance page, the Budget page and the
  * Data Upload center so parsing/writing logic exists in exactly one place.
  *
- * Attendance sheet columns (case/space-insensitive, extras ignored):
- *   EmpID | Name | Date | Status | In | Out | Shift | OT
- * Budget sheet columns:
- *   Department | Budget | (optional) Section
+ * Two attendance formats are auto-detected, no user choice needed:
+ *  1. Simple template — one sheet, one row per employee per day:
+ *       EmpID | Name | Date | Status | In | Out | Shift | OT
+ *  2. Real HRIS export ("Brandix" format) — one sheet PER DAY, with a
+ *     dated status column like " 01/07\r\nWe/W" and per-day Work/OT hour
+ *     columns stored as Excel time values. Employee master fields present in
+ *     every row (Name, Department, Section, Designation, …) are also synced
+ *     into the employee register.
+ *
+ * Two budget formats are auto-detected:
+ *  1. Simple template — one row per department (+ optional section):
+ *       Department | Budget | Section
+ *  2. Wide HRIS export — one row per designation, with a budget column per
+ *     month ("April'26" … "Mar'27"). Imports ALL months found in one go.
  */
 import { dbUpdate, dbPush, getCached } from "./store.js";
 import { notify } from "./notify.js";
@@ -14,7 +24,25 @@ import { ymd, hmToMin, fmtDate, fmtPct } from "./utils.js";
 import { dayStats } from "./metrics.js";
 import { track } from "./firebase.js";
 
-/* Normalized header → canonical attendance field. */
+/** Read a workbook (all sheets) from a File. */
+export async function readWorkbookRaw(file) {
+  const buf = await file.arrayBuffer();
+  return XLSX.read(buf, { cellDates: true });
+}
+
+/** Rows of one sheet as objects (default) or arrays (`{ header: 1 }`). */
+export function sheetRows(wb, sheetName, opts = {}) {
+  return XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "", ...opts });
+}
+
+/** Read just the first sheet of a workbook as row objects. */
+export async function readWorkbook(file) {
+  const wb = await readWorkbookRaw(file);
+  return sheetRows(wb, wb.SheetNames[0]);
+}
+
+/* ============ Attendance: simple template ============ */
+
 const HEADER_MAP = {
   empid: "empId", employeeid: "empId", id: "empId", epf: "empId", empno: "empId",
   name: "name", employeename: "name",
@@ -32,21 +60,9 @@ const STATUS_ALIASES = {
   h: "H", holiday: "H", off: "H", lt: "P", late: "P",
 };
 
-/** Read the first sheet of an Excel/CSV File into an array of row objects. */
-export async function readWorkbook(file) {
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { cellDates: true });
-  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
-}
-
-/* ============ Attendance ============ */
-
-/**
- * Parse raw sheet rows into normalized attendance records.
- * @returns {records, dates:Set, empIds:Set, skipped, errors}
- */
-export function parseAttendanceRows(raw, settings = {}) {
-  const out = { records: [], dates: new Set(), empIds: new Set(), skipped: 0, errors: [] };
+/** Parse the simple one-row-per-day template into normalized records. */
+function parseSimpleAttendance(raw, settings = {}) {
+  const out = { format: "simple", records: [], dates: new Set(), empIds: new Set(), skipped: 0, errors: [], employeesSync: {} };
   const std = settings.shiftStart || "08:00";
   const stdEnd = settings.shiftEnd || "17:00";
   const grace = Number(settings.graceMin) || 10;
@@ -89,16 +105,138 @@ export function parseAttendanceRows(raw, settings = {}) {
   return out;
 }
 
+/* ============ Attendance: real HRIS export (one sheet per day) ============ */
+
+/** Day-status codes seen in real exports → canonical attendance status. */
+const DAY_STATUS_MAP = {
+  p: "P", od: "P", // Present / On Duty
+  a: "A", // Absent
+  cl: "L", el: "L", esl: "L", sl: "L", eml: "L", lp: "L", co: "L", // leave variants
+};
+
+/** Map a raw day-status cell (e.g. "P", "A", "CL", "p/el") to a canonical status. */
+function mapDayStatus(raw) {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v.includes("/")) return v.split("/").includes("p") ? "HD" : "L"; // half-day vs split leave
+  return DAY_STATUS_MAP[v] || "L";
+}
+
+/** Excel time cell (Date at 1899-12-30 epoch, or a day-fraction number) → decimal hours. */
+function excelTimeToHours(v) {
+  if (v instanceof Date) return v.getUTCHours() + v.getUTCMinutes() / 60;
+  if (typeof v === "number") return v * 24;
+  return 0;
+}
+
+/** True when a workbook looks like the real HRIS export (dated sheet headers). */
+function looksLikeHrisWorkbook(wb) {
+  for (const name of wb.SheetNames) {
+    const header = sheetRows(wb, name, { header: 1 })[0];
+    if (header?.some((h) => /^\s*\d{1,2}\/\d{1,2}/.test(String(h)))) return true;
+  }
+  return false;
+}
+
+/** Column-name → index lookup, case/space-insensitive, from a header row. */
+function colIndex(header, name) {
+  return header.findIndex((h) => String(h).trim().toLowerCase() === name);
+}
+
 /**
- * Write parsed attendance in one batch, log to history, raise a threshold
- * alert when the latest day is below target.
+ * Parse a multi-sheet HRIS export (one sheet per day) into normalized
+ * records, plus an employee-master-data sync map built from every row.
+ */
+function parseHrisAttendanceWorkbook(wb, year) {
+  const out = { format: "hris", records: [], dates: new Set(), empIds: new Set(), skipped: 0, errors: [], employeesSync: {} };
+
+  for (const sheetName of wb.SheetNames) {
+    const rows = sheetRows(wb, sheetName, { header: 1 });
+    if (!rows.length) continue;
+    const header = rows[0];
+    const dateColIdx = header.findIndex((h) => /^\s*\d{1,2}\/\d{1,2}/.test(String(h)));
+    if (dateColIdx === -1) continue; // not a dated sheet — skip (e.g. a notes tab)
+
+    const m = String(header[dateColIdx]).trim().match(/^(\d{1,2})\/(\d{1,2})/);
+    const date = `${year}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    const idx = {
+      empId: colIndex(header, "emp id"), name: colIndex(header, "name"), team: colIndex(header, "team"),
+      designation: colIndex(header, "designation"), module: colIndex(header, "module"), section: colIndex(header, "section"),
+      buyer: colIndex(header, "buyer division"), doj: colIndex(header, "emp doj"), department: colIndex(header, "department"),
+      category: colIndex(header, "category"), grade: colIndex(header, "grade"),
+      workHours: dateColIdx + 1, otHours: dateColIdx + 2,
+    };
+    if (idx.empId === -1) { out.errors.push(`Sheet "${sheetName}": no "EMP ID" column found`); continue; }
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const empId = String(row[idx.empId] ?? "").trim();
+      const status = mapDayStatus(row[dateColIdx]);
+      if (!empId || !status) { out.skipped++; continue; }
+
+      const workHrs = excelTimeToHours(row[idx.workHours]);
+      const otHrs = excelTimeToHours(row[idx.otHours]);
+      const record = { status, workMin: Math.round(workHrs * 60), otHours: Number(otHrs.toFixed(2)) };
+      if (idx.team !== -1 && row[idx.team]) record.shift = String(row[idx.team]);
+      out.records.push({ empId, date, record });
+      out.dates.add(date);
+      out.empIds.add(empId);
+
+      if (!out.employeesSync[empId]) {
+        const doj = idx.doj !== -1 ? row[idx.doj] : null;
+        const category = idx.category !== -1 ? String(row[idx.category] || "") : "";
+        const sync = {};
+        if (idx.name !== -1 && row[idx.name]) sync.name = String(row[idx.name]).trim();
+        if (idx.department !== -1 && row[idx.department]) sync.department = String(row[idx.department]).trim();
+        if (idx.section !== -1 && row[idx.section] !== "") sync.section = String(row[idx.section]).trim();
+        if (idx.module !== -1 && row[idx.module]) sync.module = String(row[idx.module]).trim();
+        if (idx.buyer !== -1 && row[idx.buyer]) sync.buyer = String(row[idx.buyer]).trim();
+        if (idx.designation !== -1 && row[idx.designation]) sync.designation = String(row[idx.designation]).trim();
+        if (idx.grade !== -1 && row[idx.grade]) sync.grade = String(row[idx.grade]).trim();
+        if (category) { sync.category = category.trim(); sync.nationality = /expat/i.test(category) ? "Expat" : "Local"; }
+        if (doj instanceof Date) sync.doj = ymd(doj);
+        out.employeesSync[empId] = sync;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Auto-detect the attendance workbook format and parse it.
+ * @param {File} file
+ * @param {object} o {settings, year} — year is required for the HRIS format
+ *   (its sheet headers carry day/month only, e.g. "01/07").
+ */
+export async function parseAttendanceWorkbook(file, { settings = {}, year } = {}) {
+  const wb = await readWorkbookRaw(file);
+  if (looksLikeHrisWorkbook(wb)) {
+    return parseHrisAttendanceWorkbook(wb, Number(year) || new Date().getFullYear());
+  }
+  return parseSimpleAttendance(sheetRows(wb, wb.SheetNames[0]), settings);
+}
+
+/**
+ * Write parsed attendance in one batch, sync any discovered employee master
+ * data, log to history, raise a threshold alert when the latest day is low.
  * @returns number of records written
  */
 export async function importAttendance(parsed, { employees = [], settings = {} } = {}) {
   const updates = {};
   for (const { empId, date, record } of parsed.records) updates[`${date}/${empId}`] = record;
   await dbUpdate("attendance", updates);
-  track("attendance_upload", { rows: parsed.records.length });
+
+  // Merge (never overwrite unrelated fields) any employee master data found in the sheet.
+  const syncCount = Object.keys(parsed.employeesSync || {}).length;
+  if (syncCount) {
+    const empUpdates = {};
+    for (const [empId, fields] of Object.entries(parsed.employeesSync)) {
+      for (const [k, v] of Object.entries(fields)) if (v !== undefined && v !== "") empUpdates[`${empId}/${k}`] = v;
+    }
+    if (Object.keys(empUpdates).length) await dbUpdate("employees", empUpdates);
+  }
+
+  track("attendance_upload", { rows: parsed.records.length, format: parsed.format });
 
   const sorted = [...parsed.dates].sort();
   notify("attendance", "Attendance uploaded",
@@ -106,7 +244,7 @@ export async function importAttendance(parsed, { employees = [], settings = {} }
   await dbPush("uploads", {
     type: "attendance", file: parsed.fileName || "attendance.xlsx",
     rows: parsed.records.length,
-    info: `${parsed.dates.size} day(s) · ${parsed.empIds.size} employee(s)`,
+    info: `${parsed.dates.size} day(s) · ${parsed.empIds.size} employee(s)` + (syncCount ? ` · ${syncCount} profile(s) synced` : ""),
     range: sorted.length ? `${sorted[0]} → ${sorted[sorted.length - 1]}` : "",
     by: currentUser?.name || "—", ts: Date.now(),
   });
@@ -121,13 +259,10 @@ export async function importAttendance(parsed, { employees = [], settings = {} }
   return parsed.records.length;
 }
 
-/* ============ Budget ============ */
+/* ============ Budget: simple template ============ */
 
-/**
- * Parse budget rows into a { department: {total, sections?} } map.
- * @returns {parsed, deptCount, totalBudget}
- */
-export function parseBudgetRows(raw) {
+/** Parse the simple Department|Budget|Section template. */
+function parseSimpleBudget(raw) {
   const parsed = {};
   for (const row of raw) {
     const norm = {};
@@ -145,10 +280,53 @@ export function parseBudgetRows(raw) {
   }
   const deptCount = Object.keys(parsed).length;
   const totalBudget = Object.values(parsed).reduce((s, d) => s + d.total, 0);
-  return { parsed, deptCount, totalBudget };
+  return { format: "simple", parsed, deptCount, totalBudget };
 }
 
-/** Write budget for a month, log to history, notify. */
+/* ============ Budget: wide multi-month HRIS export ============ */
+
+const MONTH_ABBR = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+/** "April'26" / "Mar'27" → "2026-04" / "2027-03", or null if not a month header. */
+function parseMonthHeader(h) {
+  const m = String(h).trim().match(/^([A-Za-z]+)'(\d{2})$/);
+  if (!m) return null;
+  const mon = MONTH_ABBR[m[1].slice(0, 3).toLowerCase()];
+  if (!mon) return null;
+  return `${2000 + Number(m[2])}-${String(mon).padStart(2, "0")}`;
+}
+
+/** Parse a wide per-designation, per-month budget export. */
+function parseWideBudget(raw) {
+  const monthCols = Object.keys(raw[0] || {}).map((key) => ({ key, month: parseMonthHeader(key) })).filter((x) => x.month);
+  const months = {};
+  for (const row of raw) {
+    const dept = String(row["Department"] || row["Dept"] || "").trim();
+    const designation = String(row["Unique Designation"] || row["Designation"] || "").trim();
+    if (!dept) continue;
+    for (const { key, month } of monthCols) {
+      const raw_v = row[key];
+      const n = raw_v === "-" || raw_v === "" ? 0 : Number(raw_v);
+      if (!n || isNaN(n)) continue;
+      if (!months[month]) months[month] = {};
+      if (!months[month][dept]) months[month][dept] = { total: 0, designations: {} };
+      months[month][dept].total += n;
+      if (designation) months[month][dept].designations[designation] = (months[month][dept].designations[designation] || 0) + n;
+    }
+  }
+  const monthList = monthCols.map((m) => m.month).sort();
+  const deptSet = new Set();
+  for (const m of Object.values(months)) for (const d of Object.keys(m)) deptSet.add(d);
+  return { format: "wide", months, monthList, deptCount: deptSet.size };
+}
+
+/** Auto-detect and parse either budget format from raw sheet-object rows. */
+export function parseBudgetSheet(raw) {
+  const hasMonthCols = Object.keys(raw[0] || {}).some((k) => parseMonthHeader(k));
+  return hasMonthCols ? parseWideBudget(raw) : parseSimpleBudget(raw);
+}
+
+/** Write a single-month simple budget import, log to history, notify. */
 export async function importBudget(month, parsed, fileName = "budget.xlsx") {
   await dbUpdate(`budget/${month}`, parsed);
   const deptCount = Object.keys(parsed).length;
@@ -156,6 +334,19 @@ export async function importBudget(month, parsed, fileName = "budget.xlsx") {
   await dbPush("uploads", {
     type: "budget", file: fileName, rows: deptCount,
     info: `${deptCount} departments`, range: month,
+    by: currentUser?.name || "—", ts: Date.now(),
+  });
+}
+
+/** Write a wide multi-month budget import (all months found in the file). */
+export async function importBudgetWide(res, fileName = "budget.xlsx") {
+  const months = Object.keys(res.months).sort();
+  for (const month of months) await dbUpdate(`budget/${month}`, res.months[month]);
+  notify("budget", "Budget uploaded", `${months.length} months × ${res.deptCount} departments (${months[0]} → ${months[months.length - 1]})`);
+  await dbPush("uploads", {
+    type: "budget", file: fileName, rows: res.deptCount,
+    info: `${months.length} months × ${res.deptCount} departments`,
+    range: `${months[0]} → ${months[months.length - 1]}`,
     by: currentUser?.name || "—", ts: Date.now(),
   });
 }
