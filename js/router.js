@@ -26,6 +26,7 @@ export const PAGES = [
   { id: "budget", title: "Budget", icon: "💰", cap: null, group: "Planning", mod: () => import("./pages/budget.js") },
   { id: "vacancies", title: "Vacancies", icon: "🪑", cap: null, group: "Planning", mod: () => import("./pages/vacancies.js") },
   { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, group: "Planning", mod: () => import("./pages/recruitment.js") },
+  { id: "hr-requests", title: "HR Visit Requests", icon: "🙋", cap: "manage_hr_requests", group: "HR Operations", mod: () => import("./pages/hr-requests.js") },
   { id: "leaves", title: "Leaves", icon: "🌴", cap: null, group: "HR Operations", mod: () => import("./pages/leaves.js") },
   { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, group: "HR Operations", mod: () => import("./pages/overtime.js") },
   { id: "attrition", title: "Attrition", icon: "📉", cap: null, group: "HR Operations", mod: () => import("./pages/attrition.js") },

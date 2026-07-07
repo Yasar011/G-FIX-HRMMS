@@ -19,8 +19,12 @@
     },
 
     "employees": {
-      ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+      ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)",
+      "$empId": {
+        "name": { ".read": "auth != null" },
+        "department": { ".read": "auth != null" }
+      }
     },
 
     "attendance": {
@@ -71,6 +75,13 @@
     "uploads": {
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
+    },
+
+    "hrRequests": {
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
+      "$id": {
+        ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && newData.child('status').val() === 'pending' && newData.hasChildren(['empId','name','reason','status','createdAt'])) || (auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)))"
+      }
     },
 
     "notifications": {

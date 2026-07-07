@@ -41,6 +41,7 @@ const CAPABILITIES = {
   manage_settings: ["hr_admin"],
   manage_users: ["hr_admin"],
   seed_data: ["hr_admin"],
+  manage_hr_requests: ["hr_admin", "hr_executive"],
 };
 
 /**

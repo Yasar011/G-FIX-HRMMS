@@ -72,6 +72,29 @@ export async function render(root) {
       },
     }, "Save EmailJS settings"));
 
+  /* ---------- HR visit request kiosk ---------- */
+  const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/hr-request.html`;
+  const hrReqToggle = el("input", {
+    type: "checkbox",
+    onchange: async () => {
+      await dbUpdate("settings", { hrRequestEnabled: hrReqToggle.checked });
+      toast(hrReqToggle.checked ? "Public HR request link enabled" : "Public HR request link disabled", "ok");
+    },
+  });
+  const hrReqCard = el("div", { class: "card" },
+    el("div", { class: "card-head" }, el("h4", {}, "🙋 HR Visit Request Kiosk")),
+    el("p", { class: "muted", style: { fontSize: "13px", marginBottom: "10px" } },
+      "A public, no-login page where any employee can look themselves up by Employee ID and submit a reason to visit HR. Only their name and department are ever exposed to it — never phone, email, salary, etc. Requires Anonymous sign-in enabled in Firebase Console → Authentication → Sign-in method."),
+    el("label", { class: "inline", style: { marginBottom: "14px" } }, hrReqToggle, "Enable the public request link"),
+    el("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
+      el("input", { type: "text", value: kioskLink, readonly: "", style: { flex: 1, minWidth: "220px", fontSize: "12.5px" } }),
+      el("button", {
+        class: "btn btn-sm",
+        onclick: () => { navigator.clipboard?.writeText(kioskLink); toast("Link copied", "ok"); },
+      }, "📋 Copy link")),
+    el("p", { class: "muted", style: { fontSize: "12px", marginTop: "8px" } },
+      "Submitted requests show up under HR Visit Requests in the sidebar."));
+
   /* ---------- users & roles ---------- */
   const usersHost = el("div");
 
@@ -98,6 +121,7 @@ export async function render(root) {
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "Settings")),
     el("div", { class: "grid grid-2" }, paramsCard, emailCard),
+    hrReqCard,
     usersHost,
     can("seed_data") ? seedCard : null);
 
@@ -105,6 +129,7 @@ export async function render(root) {
     settings = s || {};
     for (const d of paramDefs) if (document.activeElement !== paramInputs[d.id]) paramInputs[d.id].value = settings[d.id] ?? "";
     for (const d of emailDefs) if (document.activeElement !== emailInputs[d.id]) emailInputs[d.id].value = settings.emailjs?.[d.id] ?? "";
+    if (document.activeElement !== hrReqToggle) hrReqToggle.checked = !!settings.hrRequestEnabled;
   });
 
   pageWatch("users", (v) => {

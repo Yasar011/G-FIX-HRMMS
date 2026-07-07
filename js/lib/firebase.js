@@ -11,6 +11,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInAnonymously,
   signOut,
   updateProfile,
   updatePassword,
@@ -63,7 +64,7 @@ export function track(eventName, params = {}) {
 
 // Re-export SDK helpers
 export {
-  onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously,
   signOut, updateProfile, updatePassword,
   ref, get, set, update, push, remove, onValue, off,
   query, orderByChild, limitToLast, serverTimestamp,
