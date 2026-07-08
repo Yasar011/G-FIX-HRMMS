@@ -219,6 +219,21 @@ export function toList(obj, keyName = "_key") {
   return Object.entries(obj).map(([k, v]) => ({ [keyName]: k, ...(typeof v === "object" && v ? v : { value: v }) }));
 }
 
+/**
+ * Flatten a two-level Firebase node — {outerKey: {innerKey: value}} — into a
+ * flat array of rows. Used for data keyed by owner (e.g. leaves/{empId}/{key},
+ * hrRequests/{empId}/{key}) so a public/anonymous session can be scoped to
+ * read only its own outerKey subtree via security rules, while admin pages
+ * still get a flat list to render as a table.
+ */
+export function flattenNested(obj, outerKeyName, keyName = "_key") {
+  const rows = [];
+  for (const [outerKey, inner] of Object.entries(obj || {})) {
+    for (const [key, v] of Object.entries(inner || {})) rows.push({ [outerKeyName]: outerKey, [keyName]: key, ...v });
+  }
+  return rows;
+}
+
 /** Initials from a name ("Kasun Perera" → "KP"). */
 export function initials(name) {
   return String(name || "?").split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "?";

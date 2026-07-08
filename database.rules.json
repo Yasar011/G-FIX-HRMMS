@@ -44,13 +44,6 @@
 
     "leaves": {
       ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
-      "$id": {
-        ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && newData.child('status').val() === 'pending' && newData.hasChildren(['empId','name','department','type','from','to','days','status','appliedAt'])) || (auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor|dept_manager|manager)$/)))"
-      }
-    },
-
-    "leavesByEmployee": {
-      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous'",
       "$empId": {
         ".read": "auth != null",
         "$id": {

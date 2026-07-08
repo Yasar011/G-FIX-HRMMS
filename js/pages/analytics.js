@@ -5,7 +5,7 @@
 import { pageWatchAll } from "../lib/store.js";
 import { chartCard } from "../lib/charts.js";
 import { filterBar } from "../components/filters.js";
-import { el, ym, fmtMonth, lastMonths, toList, groupBy, yearsSince, sum } from "../lib/utils.js";
+import { el, ym, fmtMonth, lastMonths, flattenNested, groupBy, yearsSince, sum } from "../lib/utils.js";
 import {
   empList, activeEmps, monthlyTrend, monthDates, groupAttendance, headcountTrend,
   movementTrend, attritionStats, budgetStats, distribution, AGE_BANDS, EXP_BANDS,
@@ -69,7 +69,7 @@ export async function render(root) {
     }
 
     const months = lastMonths(12);
-    const approvedLeaves = toList(cache.leaves, "_key").filter((l) => l.status === "approved");
+    const approvedLeaves = flattenNested(cache.leaves, "empId").filter((l) => l.status === "approved");
     const types = [...new Set(approvedLeaves.map((l) => l.type || "Other"))];
     charts.leave._update(months.map(fmtMonth), types.map((t, i) => ({
       label: t,

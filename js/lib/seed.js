@@ -162,7 +162,8 @@ function buildSeed() {
     }
   }
 
-  /* Leaves */
+  /* Leaves — nested leaves/{empId}/{key}, matching the live app's schema so a
+     public/anonymous session can be scoped to read only its own subtree. */
   const leaves = {};
   for (let i = 0; i < 14; i++) {
     const id = pick(ids);
@@ -170,7 +171,8 @@ function buildSeed() {
     if (e.status !== "active") continue;
     const from = addDays(today(), rint(-20, 10));
     const days = rint(1, 3);
-    leaves[`seed${i}`] = {
+    if (!leaves[id]) leaves[id] = {};
+    leaves[id][`seed${i}`] = {
       empId: id, name: e.name, department: e.department,
       type: pick(["Annual", "Casual", "Medical"]), from, to: addDays(from, days - 1), days,
       reason: "", status: pick(["approved", "approved", "pending"]),

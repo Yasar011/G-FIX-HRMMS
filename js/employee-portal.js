@@ -16,7 +16,7 @@
  * Requires: Firebase Console → Authentication → Sign-in method →
  * enable "Anonymous".
  */
-import { auth, db, signInAnonymously, onAuthStateChanged, ref, get, push, set, serverTimestamp } from "./lib/firebase.js";
+import { auth, db, signInAnonymously, onAuthStateChanged, ref, get, push, serverTimestamp } from "./lib/firebase.js";
 import { toast } from "./lib/ui.js";
 import { initials, fmtDate, el, dateRange, today } from "./lib/utils.js";
 
@@ -197,7 +197,7 @@ async function loadLeaves() {
   const host = $("leave-list");
   host.replaceChildren(el("p", { class: "muted", style: { textAlign: "center", padding: "10px 0" } }, "Loading…"));
   try {
-    const snap = await get(ref(db, `leavesByEmployee/${current.empId}`));
+    const snap = await get(ref(db, `leaves/${current.empId}`));
     const rows = Object.entries(snap.val() || {})
       .map(([key, r]) => ({ _key: key, ...r }))
       .sort((a, b) => (b.appliedAt || 0) - (a.appliedAt || 0));
@@ -283,10 +283,7 @@ async function submitLeave() {
       reason: $("lv-reason").value.trim(), status: "pending", appliedAt: Date.now(),
       source: "employee",
     };
-    // Same key mirrored to leavesByEmployee/{empId}/{key} so both the admin
-    // flat list and this kiosk's own-history view stay in sync.
-    const pushRef = push(ref(db, "leaves"), leaveObj);
-    await Promise.all([pushRef, set(ref(db, `leavesByEmployee/${current.empId}/${pushRef.key}`), leaveObj)]);
+    await push(ref(db, `leaves/${current.empId}`), leaveObj);
     await push(ref(db, "notifications"), {
       type: "leave", title: "Leave requested",
       body: `${current.name} (${current.empId}) — ${leaveObj.type}, ${half ? fmtDate(from) + " (half day)" : `${fmtDate(from)} → ${fmtDate(to)}`}`,

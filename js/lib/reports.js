@@ -13,7 +13,7 @@
  */
 import {
   ym, ymd, today, dateRange, addDays, fmtDate, parseYmd, yearsSince,
-  daysToAnniversary, toList, sum, uniq,
+  daysToAnniversary, toList, flattenNested, sum, uniq,
 } from "./utils.js";
 import {
   empList, activeEmps, dayStats, employeeAttendance, monthDates, groupAttendance,
@@ -178,7 +178,7 @@ export const REPORTS = [
     id: "leave", title: "Leave Report", icon: "🌴", group: "Attendance", params: ["month"],
     build: (data, p) => {
       const month = p.month || ym();
-      const rows = toList(data.leaves, "_key").filter((l) => l.from?.startsWith(month))
+      const rows = flattenNested(data.leaves, "empId").filter((l) => l.from?.startsWith(month))
         .map((l) => ({ id: l.empId, name: l.name, department: l.department || "", type: l.type,
           from: l.from, to: l.to, days: l.days, status: l.status, reason: l.reason || "" }));
       return { subtitle: month, columns: [{ key: "id", label: "ID" }, { key: "name", label: "Name" },

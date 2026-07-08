@@ -15,21 +15,12 @@ import { pageWatch, dbUpdate, dbPush } from "../lib/store.js";
 import { toast, badge, modal } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
-import { el, timeAgo, toList } from "../lib/utils.js";
+import { el, timeAgo, flattenNested } from "../lib/utils.js";
 import { currentUser } from "../lib/auth.js";
 import { empList, activeEmps } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1" };
 const STATUS_TONE = { pending: "warn", seen: "info", approved: "ok", rejected: "bad" };
-
-/** Flatten hrRequests/{empId}/{pushId} into a flat row list. */
-function flattenRequests(v) {
-  const rows = [];
-  for (const [empId, reqs] of Object.entries(v || {})) {
-    for (const [key, r] of Object.entries(reqs || {})) rows.push({ _key: key, empId, ...r });
-  }
-  return rows;
-}
 
 export async function render(root) {
   const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
@@ -66,7 +57,7 @@ export async function render(root) {
   pageWatch("employees", (v) => { employees = empList(v); });
 
   pageWatch("hrRequests", (v) => {
-    const rows = flattenRequests(v).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    const rows = flattenNested(v, "empId").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .map((r) => ({ ...r, when: timeAgo(r.createdAt) }));
     const now30 = Date.now() - 30 * 86400e3;
 

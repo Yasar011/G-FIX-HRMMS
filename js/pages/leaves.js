@@ -2,14 +2,14 @@
  * Leaves module — apply, approve/reject (role-gated), leave analysis chart,
  * automatic attendance marking for approved leave days.
  */
-import { pageWatchAll, dbPush, dbSet, dbUpdate } from "../lib/store.js";
+import { pageWatchAll, dbPush, dbUpdate } from "../lib/store.js";
 import { can, deptScope, currentUser } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
 import { notify } from "../lib/notify.js";
-import { el, fmtDate, today, toList, dateRange, ym, fmtMonth, lastMonths, groupBy } from "../lib/utils.js";
+import { el, fmtDate, today, flattenNested, dateRange, ym, fmtMonth, lastMonths, groupBy } from "../lib/utils.js";
 import { empList, activeEmps } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1" };
@@ -57,7 +57,7 @@ export async function render(root) {
 
   pageWatchAll(["employees", "leaves"], (data) => {
     employees = empList(data.employees);
-    let leaves = toList(data.leaves, "_key");
+    let leaves = flattenNested(data.leaves, "empId");
     if (scope) leaves = leaves.filter((l) => l.department === scope);
     const month = ym();
     const approved = leaves.filter((l) => l.status === "approved");
@@ -122,12 +122,7 @@ export async function render(root) {
     const span = leave.halfDay ? `${fmtDate(leave.from)} (half day)` : `${fmtDate(leave.from)} → ${fmtDate(leave.to)}`;
     if (!(await confirmDialog(`${status === "approved" ? "Approve" : "Reject"} ${leave.name}'s ${leave.type} leave (${span})?`, { danger: status === "rejected" }))) return;
     const patch = { status, approvedBy: currentUser?.name || "—", decidedAt: Date.now() };
-    // Mirrored into leavesByEmployee/{empId}/{key} so the public "Check My
-    // Leave" kiosk can read its own status without browsing everyone else's.
-    await Promise.all([
-      dbUpdate(`leaves/${leave._key}`, patch),
-      dbUpdate(`leavesByEmployee/${leave.empId}/${leave._key}`, patch),
-    ]);
+    await dbUpdate(`leaves/${leave.empId}/${leave._key}`, patch);
     if (status === "approved") {
       const updates = {};
       if (leave.halfDay) updates[`${leave.from}/${leave.empId}`] = { status: "HD" };
@@ -195,9 +190,7 @@ export async function render(root) {
               halfDay,
               reason: reason.value.trim(), status: "pending", appliedAt: Date.now(),
             };
-            // Same key mirrored to leavesByEmployee/{empId}/{key} — see decide() above.
-            const pushRef = dbPush("leaves", leaveObj);
-            await Promise.all([pushRef, dbSet(`leavesByEmployee/${emp.id}/${pushRef.key}`, leaveObj)]);
+            await dbPush(`leaves/${emp.id}`, leaveObj);
             toast("Leave request submitted", "ok");
             close();
           },
