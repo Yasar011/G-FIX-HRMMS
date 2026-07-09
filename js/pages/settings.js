@@ -9,6 +9,7 @@ import { dataTable } from "../components/table.js";
 import { el, toList, timeAgo, uniq } from "../lib/utils.js";
 import { empList, activeEmps } from "../lib/metrics.js";
 import { getCached } from "../lib/store.js";
+import { auth, sendPasswordResetEmail } from "../lib/firebase.js";
 
 export async function render(root) {
   let settings = {};
@@ -118,12 +119,21 @@ export async function render(root) {
       },
     }, "Load sample data"));
 
+  /* ---------- about ---------- */
+  const aboutCard = el("div", { class: "card" },
+    el("div", { class: "card-head" }, el("h4", {}, "ℹ️ About")),
+    el("p", { class: "muted", style: { fontSize: "13px" } },
+      "Brandix Unit 3 · G-FIX HR Analytics Dashboard"),
+    el("p", { class: "muted", style: { fontSize: "12px" } },
+      "Developed by NIFT Jodhpur — Yasar CH, Anirudra"));
+
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "Settings")),
     el("div", { class: "grid grid-2" }, paramsCard, emailCard),
     hrReqCard,
     usersHost,
-    can("seed_data") ? seedCard : null);
+    can("seed_data") ? seedCard : null,
+    aboutCard);
 
   pageWatch("settings", (s) => {
     settings = s || {};
@@ -146,13 +156,27 @@ export async function render(root) {
         { key: "createdAt", label: "Joined", render: (r) => timeAgo(r.createdAt), exportVal: (r) => r.createdAt ? new Date(r.createdAt).toISOString() : "" },
         {
           key: "_act", label: "", exportVal: () => "",
-          render: (r) => el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); editUser(r); } }, "Edit role"),
+          render: (r) => el("div", { style: { display: "flex", gap: "6px" } },
+            el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); editUser(r); } }, "Edit role"),
+            el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); resetPassword(r); } }, "Reset password")),
         },
       ],
       rows: users,
       empty: "No users yet",
     }));
   });
+
+  /** Send a Firebase password-reset email — the secure way to unlock/reset a user's login. */
+  async function resetPassword(user) {
+    if (!user.email) { toast("This user has no email on file", "warn"); return; }
+    if (!(await confirmDialog(`Send a password reset email to ${user.email}?`, { danger: false }))) return;
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      toast(`Reset email sent to ${user.email}`, "ok");
+    } catch (e) {
+      toast(e?.message || "Could not send reset email", "err");
+    }
+  }
 
   /** Role/department editor for a user account. */
   function editUser(user) {
