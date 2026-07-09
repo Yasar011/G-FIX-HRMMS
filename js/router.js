@@ -33,7 +33,6 @@ export const PAGES = [
   { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", group: "Insights", mod: () => import("./pages/reports.js") },
   { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", group: "Insights", mod: () => import("./pages/email.js") },
   { id: "notifications", title: "Notifications", icon: "🔔", cap: null, group: "Insights", mod: () => import("./pages/notifications.js") },
-  { id: "ai-assistant", title: "AI Assistant", icon: "✨", cap: null, group: "Insights", mod: () => import("./pages/ai-assistant.js") },
   { id: "analytics", title: "Analytics", icon: "📈", cap: null, group: "Insights", mod: () => import("./pages/analytics.js") },
   { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", group: "Admin", mod: () => import("./pages/settings.js") },
   { id: "profile", title: "Profile", icon: "👤", cap: null, group: "Admin", mod: () => import("./pages/profile.js") },

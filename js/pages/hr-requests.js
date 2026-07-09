@@ -18,7 +18,6 @@ import { kpiGrid } from "../components/kpi.js";
 import { el, timeAgo, flattenNested } from "../lib/utils.js";
 import { currentUser } from "../lib/auth.js";
 import { empList, activeEmps } from "../lib/metrics.js";
-import { askGrok } from "../lib/ai.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1" };
 const STATUS_TONE = { pending: "warn", seen: "info", approved: "ok", rejected: "bad" };
@@ -121,42 +120,13 @@ export async function render(root) {
     const active = activeEmps(employees);
     const empSel = el("select", {}, ...active.map((e) => el("option", { value: e.id }, `${e.name} (${e.id}) — ${e.department || "—"}`)));
     const reason = el("textarea", { rows: "3", placeholder: "e.g. Please come collect your ID card renewal" });
-    const draftBtn = el("button", { class: "btn btn-sm", type: "button", onclick: draftReason }, "✨ Draft with AI");
-
-    async function draftReason() {
-      const topic = reason.value.trim();
-      if (!topic) { toast('Type a few keywords first (e.g. "ID card renewal"), then draft', "warn"); return; }
-      draftBtn.disabled = true;
-      draftBtn.textContent = "Drafting…";
-      try {
-        const text = await askGrok([
-          {
-            role: "system",
-            content: "You help HR staff at a garment factory write a short, polite, professional message asking "
-              + "an employee to visit the HR office. Given a few keywords, write ONE short message (2-3 sentences "
-              + "max), plain text, no greeting or signature. Do not invent specific names, dates, or details beyond "
-              + "what's given.",
-          },
-          { role: "user", content: topic },
-        ], { maxTokens: 150 });
-        reason.value = text.trim() || topic;
-      } catch (e) {
-        toast(e.message || "Could not draft a message", "err");
-      } finally {
-        draftBtn.disabled = false;
-        draftBtn.textContent = "✨ Draft with AI";
-      }
-    }
 
     modal({
       title: "Request an employee to visit HR",
       width: "560px",
       body: el("div", { class: "form-grid" },
         el("label", { class: "field" }, el("span", {}, "Employee"), empSel),
-        el("label", { class: "field" },
-          el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-            el("span", {}, "Reason"), draftBtn),
-          reason)),
+        el("label", { class: "field" }, el("span", {}, "Reason"), reason)),
       actions: [
         { label: "Cancel", class: "btn-ghost", onClick: () => {} },
         {
