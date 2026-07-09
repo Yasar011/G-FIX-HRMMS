@@ -6,6 +6,7 @@
     "users": {
       ".read": "auth != null",
       "$uid": {
+        ".write": "auth != null && $uid === auth.uid && !data.exists() && newData.hasChildren(['email','name','role','department','createdAt']) && (newData.child('role').val() === 'management' || (newData.child('role').val() === 'hr_admin' && !root.child('users').exists()))",
         "role": {
           ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/) || ($uid === auth.uid && !data.exists() && ((!root.child('users').exists() && newData.val() === 'hr_admin') || newData.val() === 'management')))"
         },
