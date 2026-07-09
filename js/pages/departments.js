@@ -47,46 +47,30 @@ function actualCountsBy(members, sel) {
 
 /**
  * Small card listing a budget breakdown (designation / category / local-expat)
- * sorted by budget count descending. Only populated when the budget was
- * imported from a wide multi-month HRIS export — the simple Department|Budget
- * template has no such detail, so an empty state points users at what to
- * upload instead of showing a broken/empty table.
+ * sorted by budget count descending, always compared against actual headcount
+ * when an actualMap is given. Any actual headcount that doesn't match a
+ * budgeted name is rolled into an "Other (not in budget file)" row rather
+ * than silently dropped, so the numbers always add up.
  *
  * @param {Array<{name,count}>|null} budgetItems  from budgetStats()'s per-dimension breakdown
  * @param {Map<string,number>|null} actualMap  normalized-name → actual headcount, or null when
- *   there's no comparable field on the employee record (shows budget-only with a note)
+ *   there's no comparable field on the employee record at all (shows budget-only)
  */
-const MIN_MATCH_RATE = 0.3; // below this, the two files' naming is too different to compare honestly
-
-function breakdownCard(title, icon, budgetItems, actualMap = null, noCompareNote = "") {
+function breakdownCard(title, icon, budgetItems, actualMap = null) {
   const items = (budgetItems || []).slice().sort((a, b) => b.count - a.count);
-  let showActual = !!actualMap;
-  let note = noCompareNote;
+  const showActual = !!actualMap;
 
   let rows = items.map((it) => ({ name: it.name, budget: it.count, actual: actualMap ? (actualMap.get(normName(it.name)) || 0) : null }));
 
   if (actualMap) {
     const totalActual = sum([...actualMap.values()]);
     const matchedActual = sum(rows, (r) => r.actual);
-    const matchRate = totalActual ? matchedActual / totalActual : 1;
-    if (totalActual > 0 && matchRate < MIN_MATCH_RATE) {
-      // Names don't align between the two files enough to compare honestly —
-      // fall back to budget-only rather than show a wall of false zeros.
-      showActual = false;
-      rows = items.map((it) => ({ name: it.name, budget: it.count, actual: null }));
-      note = `Actual headcount isn't shown — the names in your attendance and budget files don't match closely enough to compare (only ${Math.round(matchRate * 100)}% matched).`;
-    } else {
-      // Any actual headcount that doesn't match a budgeted name — surface it
-      // as a rollup row rather than silently dropping real people.
-      const unmatchedTotal = totalActual - matchedActual;
-      if (unmatchedTotal) rows.push({ name: "Other (not in budget file)", budget: 0, actual: unmatchedTotal, dim: true });
-    }
+    const unmatchedTotal = totalActual - matchedActual;
+    if (unmatchedTotal) rows.push({ name: "Other (not in budget file)", budget: 0, actual: unmatchedTotal, dim: true });
   }
 
   return el("div", { class: "card" },
-    el("div", { class: "card-head" },
-      el("h4", {}, `${icon} ${title}`),
-      !showActual && actualMap ? badge("Budget only", "dim") : null),
+    el("div", { class: "card-head" }, el("h4", {}, `${icon} ${title}`)),
     rows.length
       ? el("div", {},
           el("div", { class: "stat-row", style: { fontSize: "11px" } },
@@ -102,8 +86,7 @@ function breakdownCard(title, icon, budgetItems, actualMap = null, noCompareNote
                   el("strong", { class: r.actual > r.budget ? "text-bad" : r.actual < r.budget ? "text-warn" : "text-ok" }, fmtNum(r.actual)))
               : el("strong", {}, fmtNum(r.budget)))))
       : el("p", { class: "muted", style: { fontSize: "12.5px" } },
-          "No breakdown for this month — upload a detailed multi-month budget export to see this."),
-    note ? el("p", { class: "muted", style: { fontSize: "11.5px", marginTop: "10px" } }, note) : null);
+          "No breakdown for this month — upload a detailed multi-month budget export to see this."));
 }
 
 export async function render(root, params = []) {
@@ -258,8 +241,7 @@ function renderDetail(root, dept) {
 
     budgetBreakdownHost.replaceChildren(
       breakdownCard("Budget by Designation", "🧾", b?.designations, actualCountsBy(members, (e) => e.designation)),
-      breakdownCard("Budget by Category", "🏷️", b?.categories, null,
-        "No comparable field on employee records — this budget file's category (Staff / Associate-Direct / …) doesn't match anything captured from attendance uploads, so only the budgeted split is shown."),
+      breakdownCard("Budget by Category", "🏷️", b?.categories, actualCountsBy(members, (e) => e.category)),
       breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat, actualCountsBy(members, (e) => e.nationality)));
 
     // Daily trend scoped to this department
