@@ -68,8 +68,12 @@ let profileUnsub = null;
 
 /**
  * Start listening to Firebase auth state.
- * @param {Function} onUser  called with the merged profile (or null) whenever
+ * @param {Function} onUser  called with (profile|null, errorMessage?) whenever
  *                           auth state OR the user's DB profile changes.
+ *                           errorMessage is only set when sign-in succeeded
+ *                           but the user's profile couldn't be loaded/created
+ *                           (e.g. database rules not published) — the caller
+ *                           should show it rather than hang silently.
  */
 export function initAuth(onUser) {
   onAuthStateChanged(auth, async (fbUser) => {
@@ -78,29 +82,42 @@ export function initAuth(onUser) {
 
     if (!fbUser) { currentUser = null; onUser(null); return; }
 
-    // Ensure a profile record exists (first login after register).
-    const path = `users/${fbUser.uid}`;
-    let profile = await read(path);
-    if (!profile) {
-      const allUsers = await read("users");
-      const isFirst = !allUsers || Object.keys(allUsers).length === 0;
-      profile = {
-        email: fbUser.email,
-        name: fbUser.displayName || fbUser.email.split("@")[0],
-        role: isFirst ? "hr_admin" : "management",
-        department: "",
-        createdAt: Date.now(),
-      };
-      await dbSet(path, profile);
-    }
+    try {
+      // Ensure a profile record exists — covers first login after register,
+      // AND a Firebase Auth user created directly in the console (which has
+      // no users/{uid} record at all until this runs).
+      const path = `users/${fbUser.uid}`;
+      let profile = await read(path);
+      if (!profile) {
+        const allUsers = await read("users");
+        const isFirst = !allUsers || Object.keys(allUsers).length === 0;
+        profile = {
+          email: fbUser.email,
+          name: fbUser.displayName || fbUser.email.split("@")[0],
+          role: isFirst ? "hr_admin" : "management",
+          department: "",
+          createdAt: Date.now(),
+        };
+        await dbSet(path, profile);
+      }
 
-    // Keep currentUser live — role changes apply without re-login.
-    profileUnsub = watch(path, (p) => {
-      if (!p) return;
-      currentUser = { uid: fbUser.uid, ...p };
-      onUser(currentUser);
-    });
-    track("login", { role: profile.role });
+      // Keep currentUser live — role changes apply without re-login.
+      profileUnsub = watch(path, (p) => {
+        if (!p) return;
+        currentUser = { uid: fbUser.uid, ...p };
+        onUser(currentUser);
+      });
+      track("login", { role: profile.role });
+    } catch (e) {
+      // Signed in with Firebase Auth, but the database rejected reading or
+      // creating the profile record — most commonly stale/unpublished
+      // database rules. Sign back out so the app isn't stuck half-logged-in,
+      // and surface the real error instead of hanging on "Please wait…".
+      console.error("Failed to load/create user profile after sign-in", e);
+      currentUser = null;
+      await signOut(auth).catch(() => {});
+      onUser(null, `Signed in, but couldn't load your account — ${e?.message || "database permission error"}. Ask an admin to check the database rules are published.`);
+    }
   });
 }
 

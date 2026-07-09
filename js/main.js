@@ -27,12 +27,17 @@ if (isConfigPlaceholder) {
 let shellReady = false;
 
 /** React to sign-in/out and live profile (role) changes. */
-function onAuthChanged(user) {
+function onAuthChanged(user, errorMessage) {
   $("loading-screen").classList.add("hidden");
   if (!user) {
     shellReady = false;
     $("app").classList.add("hidden");
     $("login-screen").classList.remove("hidden");
+    if (errorMessage) {
+      const errBox = $("login-error");
+      errBox.textContent = errorMessage;
+      errBox.classList.remove("hidden");
+    }
     return;
   }
   $("login-screen").classList.add("hidden");
