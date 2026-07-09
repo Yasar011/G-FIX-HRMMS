@@ -4,12 +4,12 @@
  * Route: #/departments          → overview cards (one per department)
  *        #/departments/{name}   → department detail page with KPIs + charts
  */
-import { pageWatch, pageWatchAll } from "../lib/store.js";
-import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth } from "../lib/utils.js";
+import { pageWatch, pageWatchAll, dbSet } from "../lib/store.js";
+import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth, sanitizeKey } from "../lib/utils.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
 import { dataTable } from "../components/table.js";
-import { emptyState, progressBar, badge } from "../lib/ui.js";
+import { emptyState, progressBar, badge, modal, toast } from "../lib/ui.js";
 import {
   empList, activeEmps, employeeAttendance, monthDates, groupAttendance,
   budgetStats, dailyTrend, dayStats, absenteeStats,
@@ -52,27 +52,43 @@ function actualCountsBy(members, sel) {
  * sorted by budget count descending, always compared against actual headcount
  * when an actualMap is given. Any actual headcount whose name isn't in the
  * budget file gets its own row (by its real name, not lumped into one
- * "Other" bucket) so nobody is silently dropped from the picture.
+ * "Other" bucket) — with a "🔗 Map" button so HR can tell the app that, say,
+ * "SMO" and "Team Member - Sewing" are the same role once, after which
+ * they're counted together everywhere.
  *
  * @param {Array<{name,count}>|null} budgetItems  from budgetStats()'s per-dimension breakdown
  * @param {Map<string,{label,count}>|null} actualMap  from actualCountsBy(), or null when there's
  *   no comparable field on the employee record at all (shows budget-only)
+ * @param {object} [opts]
+ * @param {Record<string,string>} [opts.aliases]  normalized actual name → budget item name
+ * @param {(actualKey:string, actualLabel:string) => void} [opts.onMap]  called when HR maps an unmatched row
  */
-function breakdownCard(title, icon, budgetItems, actualMap = null) {
+function breakdownCard(title, icon, budgetItems, actualMap = null, opts = {}) {
+  const { aliases = {}, onMap = null } = opts;
   const items = (budgetItems || []).slice().sort((a, b) => b.count - a.count);
   const showActual = !!actualMap;
-  const matchedKeys = new Set();
+  const budgetByNorm = new Map(items.map((it) => [normName(it.name), it]));
+
+  const resolved = new Map(); // budget normKey -> actual count contributed (post-alias)
+  const unmatched = []; // {key, label, count} — no budget match even after alias
+  if (actualMap) {
+    for (const [k, { label, count }] of actualMap) {
+      // Aliases are stored under a Firebase-safe key (sanitizeKey), since the
+      // raw normalized name can contain characters Firebase keys forbid.
+      const aliasTarget = aliases[sanitizeKey(k)];
+      const targetKey = aliasTarget ? normName(aliasTarget) : k;
+      if (budgetByNorm.has(targetKey)) resolved.set(targetKey, (resolved.get(targetKey) || 0) + count);
+      else unmatched.push({ key: k, label, count });
+    }
+  }
 
   let rows = items.map((it) => {
     const k = normName(it.name);
-    const entry = actualMap?.get(k);
-    if (entry) matchedKeys.add(k);
-    return { name: it.name, budget: it.count, actual: entry ? entry.count : (actualMap ? 0 : null) };
+    return { name: it.name, budget: it.count, actual: actualMap ? (resolved.get(k) || 0) : null };
   });
-
   if (actualMap) {
-    const unmatched = [...actualMap.entries()].filter(([k]) => !matchedKeys.has(k)).map(([, v]) => v).sort((a, b) => b.count - a.count);
-    for (const { label, count } of unmatched) rows.push({ name: `${label} (not in budget file)`, budget: 0, actual: count, dim: true });
+    for (const { key, label, count } of unmatched.sort((a, b) => b.count - a.count))
+      rows.push({ name: `${label} (not in budget file)`, budget: 0, actual: count, dim: true, mapKey: key, mapLabel: label });
   }
 
   return el("div", { class: "card" },
@@ -85,7 +101,11 @@ function breakdownCard(title, icon, budgetItems, actualMap = null) {
               ? el("span", { class: "muted", style: { display: "flex", gap: "14px" } }, el("span", {}, "Budget"), el("span", {}, "Actual"))
               : el("span", { class: "muted" }, "Budget")),
           ...rows.map((r) => el("div", { class: "stat-row" },
-            el("span", { class: r.dim ? "muted" : "" }, r.name),
+            el("span", { class: r.dim ? "muted" : "", style: { display: "flex", alignItems: "center", gap: "8px" } },
+              r.name,
+              r.mapKey && onMap
+                ? el("button", { class: "btn btn-sm", style: { padding: "1px 8px", fontSize: "11px" }, onclick: () => onMap(r.mapKey, r.mapLabel) }, "🔗 Map")
+                : null),
             showActual
               ? el("span", { style: { display: "flex", gap: "14px", minWidth: "90px", justifyContent: "flex-end" } },
                   el("span", {}, fmtNum(r.budget)),
@@ -201,6 +221,7 @@ function renderDetail(root, dept) {
 
   let cache = null; // {employees, attendance, attrition, leaves} — stable paths, independent of the month picker
   let budgetMonthObj = null;
+  let deptAliases = {}; // {designations:{normKey:budgetName}, categories:{...}, localExpat:{...}}
   let unwatchBudget = null;
 
   function watchBudgetMonth() {
@@ -209,6 +230,31 @@ function renderDetail(root, dept) {
   }
   watchBudgetMonth();
   pageWatchAll(["employees", "attendance", "attrition", "leaves"], (data) => { cache = data; refresh(); });
+  pageWatch(`budgetAliases/${sanitizeKey(dept)}`, (v) => { deptAliases = v || {}; refresh(); });
+
+  /** Let HR tell the app that an unmatched actual name (e.g. "SMO") is the same role as a budgeted one (e.g. "Team Member - Sewing"). */
+  function mapUnmatched(dimension, budgetItems, actualKey, actualLabel) {
+    const items = (budgetItems || []).slice().sort((a, b) => b.count - a.count);
+    if (!items.length) { toast("No budgeted roles to map to in this dimension", "warn"); return; }
+    const sel = el("select", {}, ...items.map((it) => el("option", { value: it.name }, it.name)));
+    modal({
+      title: `Map "${actualLabel}"`,
+      body: el("div", { class: "form-grid" },
+        el("p", { class: "muted", style: { fontSize: "13px" } }, `Which budgeted role is "${actualLabel}" actually referring to? They'll be counted together from now on.`),
+        el("label", { class: "field" }, el("span", {}, "Budgeted role"), sel)),
+      actions: [
+        { label: "Cancel", class: "btn-ghost", onClick: () => {} },
+        {
+          label: "Map", class: "btn-primary",
+          onClick: async (e, close) => {
+            await dbSet(`budgetAliases/${sanitizeKey(dept)}/${dimension}/${sanitizeKey(actualKey)}`, sel.value);
+            toast(`"${actualLabel}" mapped to "${sel.value}"`, "ok");
+            close();
+          },
+        },
+      ],
+    });
+  }
 
   function refresh() {
     if (!cache) return;
@@ -246,9 +292,12 @@ function renderDetail(root, dept) {
     });
 
     budgetBreakdownHost.replaceChildren(
-      breakdownCard("Budget by Designation", "🧾", b?.designations, actualCountsBy(members, (e) => e.designation)),
-      breakdownCard("Budget by Category", "🏷️", b?.categories, actualCountsBy(members, (e) => e.category)),
-      breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat, actualCountsBy(members, (e) => e.nationality)));
+      breakdownCard("Budget by Designation", "🧾", b?.designations, actualCountsBy(members, (e) => e.designation),
+        { aliases: deptAliases.designations || {}, onMap: (k, label) => mapUnmatched("designations", b?.designations, k, label) }),
+      breakdownCard("Budget by Category", "🏷️", b?.categories, actualCountsBy(members, (e) => e.category),
+        { aliases: deptAliases.categories || {}, onMap: (k, label) => mapUnmatched("categories", b?.categories, k, label) }),
+      breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat, actualCountsBy(members, (e) => e.nationality),
+        { aliases: deptAliases.localExpat || {}, onMap: (k, label) => mapUnmatched("localExpat", b?.localExpat, k, label) }));
 
     // Daily trend scoped to this department
     const scoped = members;

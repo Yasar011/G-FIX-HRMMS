@@ -37,6 +37,11 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
+    "budgetAliases": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
+    },
+
     "attrition": {
       ".read": "auth != null",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
