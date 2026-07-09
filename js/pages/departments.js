@@ -5,7 +5,7 @@
  *        #/departments/{name}   → department detail page with KPIs + charts
  */
 import { pageWatch, pageWatchAll } from "../lib/store.js";
-import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth, sum } from "../lib/utils.js";
+import { el, esc, ym, fmtPct, fmtNum, uniq, groupBy, toList, lastMonths, fmtMonth } from "../lib/utils.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
 import { dataTable } from "../components/table.js";
@@ -33,14 +33,16 @@ const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", bra
 /** Case/whitespace-insensitive name key, matching the budgetStats() department join. */
 function normName(s) { return String(s ?? "").trim().toLowerCase(); }
 
-/** Count department members by a selector (designation, nationality, …), keyed normalized. */
+/** Count department members by a selector (designation, nationality, …), keyed normalized but keeping a real display label. */
 function actualCountsBy(members, sel) {
-  const map = new Map();
+  const map = new Map(); // normKey -> { label, count }
   for (const e of members) {
     const v = sel(e);
     if (!v) continue;
     const k = normName(v);
-    map.set(k, (map.get(k) || 0) + 1);
+    const entry = map.get(k);
+    if (entry) entry.count++;
+    else map.set(k, { label: String(v).trim(), count: 1 });
   }
   return map;
 }
@@ -48,25 +50,29 @@ function actualCountsBy(members, sel) {
 /**
  * Small card listing a budget breakdown (designation / category / local-expat)
  * sorted by budget count descending, always compared against actual headcount
- * when an actualMap is given. Any actual headcount that doesn't match a
- * budgeted name is rolled into an "Other (not in budget file)" row rather
- * than silently dropped, so the numbers always add up.
+ * when an actualMap is given. Any actual headcount whose name isn't in the
+ * budget file gets its own row (by its real name, not lumped into one
+ * "Other" bucket) so nobody is silently dropped from the picture.
  *
  * @param {Array<{name,count}>|null} budgetItems  from budgetStats()'s per-dimension breakdown
- * @param {Map<string,number>|null} actualMap  normalized-name → actual headcount, or null when
- *   there's no comparable field on the employee record at all (shows budget-only)
+ * @param {Map<string,{label,count}>|null} actualMap  from actualCountsBy(), or null when there's
+ *   no comparable field on the employee record at all (shows budget-only)
  */
 function breakdownCard(title, icon, budgetItems, actualMap = null) {
   const items = (budgetItems || []).slice().sort((a, b) => b.count - a.count);
   const showActual = !!actualMap;
+  const matchedKeys = new Set();
 
-  let rows = items.map((it) => ({ name: it.name, budget: it.count, actual: actualMap ? (actualMap.get(normName(it.name)) || 0) : null }));
+  let rows = items.map((it) => {
+    const k = normName(it.name);
+    const entry = actualMap?.get(k);
+    if (entry) matchedKeys.add(k);
+    return { name: it.name, budget: it.count, actual: entry ? entry.count : (actualMap ? 0 : null) };
+  });
 
   if (actualMap) {
-    const totalActual = sum([...actualMap.values()]);
-    const matchedActual = sum(rows, (r) => r.actual);
-    const unmatchedTotal = totalActual - matchedActual;
-    if (unmatchedTotal) rows.push({ name: "Other (not in budget file)", budget: 0, actual: unmatchedTotal, dim: true });
+    const unmatched = [...actualMap.entries()].filter(([k]) => !matchedKeys.has(k)).map(([, v]) => v).sort((a, b) => b.count - a.count);
+    for (const { label, count } of unmatched) rows.push({ name: `${label} (not in budget file)`, budget: 0, actual: count, dim: true });
   }
 
   return el("div", { class: "card" },
