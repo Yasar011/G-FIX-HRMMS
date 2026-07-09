@@ -90,19 +90,27 @@ export const REPORTS = [
       const date = p.date || today();
       const employees = empList(data.employees);
       const byId = Object.fromEntries(employees.map((e) => [e.id, e]));
-      const rows = Object.entries(data.attendance?.[date] || {}).map(([id, r]) => ({
+      const dayObj = data.attendance?.[date] || {};
+      const rows = Object.entries(dayObj).map(([id, r]) => ({
         id, name: byId[id]?.name || r.name || "", department: byId[id]?.department || "",
         section: byId[id]?.section || "", shift: r.shift || "",
         status: ATT_STATUS[r.status] || r.status, in: r.in || "", out: r.out || "",
         workHrs: Number(((r.workMin || 0) / 60).toFixed(1)), otHrs: r.otHours || 0,
         late: r.late ? "Yes" : "", earlyOut: r.earlyOut ? "Yes" : "",
       }));
+      const s = dayStats(dayObj, employees);
       return {
         subtitle: fmtDate(date),
         columns: [...EMP_COLS.slice(0, 4), { key: "shift", label: "Shift" }, { key: "status", label: "Status" },
           { key: "in", label: "In" }, { key: "out", label: "Out" }, { key: "workHrs", label: "Hours" },
           { key: "otHrs", label: "OT" }, { key: "late", label: "Late" }, { key: "earlyOut", label: "Early Out" }],
         rows,
+        summary: [
+          { label: "Present", value: s.present }, { label: "Absent", value: s.absent },
+          { label: "Leave", value: s.leave }, { label: "Half Day", value: s.halfDay },
+          { label: "Late", value: s.late }, { label: "Early Out", value: s.earlyOut },
+          { label: "Unmarked", value: s.unmarked }, { label: "OT Hrs", value: Number(s.otHours.toFixed(1)) },
+        ],
       };
     },
   },

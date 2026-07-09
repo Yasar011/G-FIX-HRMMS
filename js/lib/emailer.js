@@ -81,13 +81,13 @@ export async function sendReportEmail(reportId, { to, params = {}, attachPdf = t
   for (const path of ["employees", "attendance", "budget", "attrition", "leaves", "vacancies", "recruitment", "settings"]) {
     data[path] = await read(path);
   }
-  const { columns, rows, subtitle } = report.build(data, { date: today(), month: ym(), year: String(new Date().getFullYear()), ...params });
+  const { columns, rows, subtitle, summary } = report.build(data, { date: today(), month: ym(), year: String(new Date().getFullYear()), ...params });
   const subject = `[Brandix U3 HR] ${report.title}${subtitle ? " — " + subtitle : ""}`;
   await sendEmail({
     to, subject,
     message: `${noteTop || report.title} · ${rows.length} records · generated ${new Date().toLocaleString()}`,
     html: reportHtml(columns, rows),
-    attachPdf: attachPdf && rows.length ? buildPDF(rows, report.id, columns, { title: report.title, subtitle }) : null,
+    attachPdf: attachPdf && rows.length ? buildPDF(rows, report.id, columns, { title: report.title, subtitle, summary }) : null,
     attachXlsx: attachXlsx && rows.length ? { rows, columns, name: report.id } : null,
   });
   return { subject, rows: rows.length };

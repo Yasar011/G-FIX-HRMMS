@@ -63,18 +63,20 @@ export async function render(root) {
     let built;
     try { built = report.build(data, params); }
     catch (e) { console.error(e); toast("Failed to build report", "err"); return; }
-    const { columns, rows, subtitle } = built;
+    const { columns, rows, subtitle, summary } = built;
     if (!rows.length) { toast("No data for the selected parameters", "warn"); return; }
     const name = report.id;
     track("report_export", { report: name, format });
 
-    if (format === "pdf") exportPDF(rows, name, columns, { title: report.title, subtitle });
+    if (format === "pdf") exportPDF(rows, name, columns, { title: report.title, subtitle, summary });
     else if (format === "xlsx") exportXLSX(rows, name, columns);
     else if (format === "csv") exportCSV(rows, name, columns);
     else {
       previewHost.replaceChildren(
         el("div", { class: "page-head", style: { marginTop: "6px" } },
           el("h3", {}, `${report.icon} ${report.title}${subtitle ? " — " + subtitle : ""}`)),
+        summary ? el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" } },
+          ...summary.map((s) => el("span", { class: "chip" }, `${s.label}: ${s.value}`))) : null,
         dataTable({
           title: `Preview (${rows.length} rows)`,
           exportName: name,

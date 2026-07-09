@@ -39,22 +39,34 @@ export function exportCSV(rows, name = "report", columns = null) {
  * Export rows to a branded PDF table.
  * @returns {jsPDF} the document (caller may attach it to an email instead of saving)
  */
-export function buildPDF(rows, name = "report", columns = null, { title = name, subtitle = "" } = {}) {
+export function buildPDF(rows, name = "report", columns = null, { title = name, subtitle = "", summary = null } = {}) {
   const { jsPDF } = window.jspdf;
   const cols = columns || Object.keys(rows[0] || {}).map((k) => ({ key: k, label: k }));
   const doc = new jsPDF({ orientation: cols.length > 7 ? "landscape" : "portrait", unit: "pt" });
+  const pageW = doc.internal.pageSize.getWidth();
 
   // Header band
   doc.setFillColor(99, 102, 241);
-  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 54, "F");
+  doc.rect(0, 0, pageW, 54, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(15).setFont(undefined, "bold");
   doc.text("Brandix Unit 3 — HR Analytics", 40, 24);
   doc.setFontSize(10).setFont(undefined, "normal");
   doc.text(`${title}${subtitle ? " · " + subtitle : ""} · Generated ${new Date().toLocaleString()}`, 40, 40);
 
+  // Summary strip (e.g. Present / Absent / Leave / Half Day counts)
+  let startY = 66;
+  if (summary && summary.length) {
+    doc.setFillColor(238, 240, 252);
+    doc.rect(0, 54, pageW, 27, "F");
+    doc.setTextColor(60, 62, 100);
+    doc.setFontSize(9.5).setFont(undefined, "bold");
+    doc.text(summary.map((s) => `${s.label}: ${s.value}`).join("      "), 40, 72);
+    startY = 96;
+  }
+
   doc.autoTable({
-    startY: 66,
+    startY,
     head: [cols.map((c) => c.label)],
     body: rows.map((r) => cols.map((c) => String(r[c.key] ?? ""))),
     styles: { fontSize: 8, cellPadding: 4 },
