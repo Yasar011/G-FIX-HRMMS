@@ -22,6 +22,36 @@ import { empList, activeEmps, budgetStats, budgetSummary } from "../lib/metrics.
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", brand: "#6366f1", violet: "#a78bfa" };
 
+/**
+ * Classify a budget category / employee grade name as Direct or Indirect.
+ * The budget file's "Category 2" carries this explicitly ("Associate - Direct"
+ * / "Associate - Indirect"); everything else (Staff, Manager, Executive…) is
+ * indirect labour, while production roles read as direct.
+ */
+function classifyDI(name) {
+  const s = String(name || "").toLowerCase();
+  if (s.includes("indirect")) return "Indirect";
+  if (s.includes("direct")) return "Direct";
+  if (/oper|sew|cut|tailor|helper|\bline\b|machinist|iron|pack|production|kaizen/.test(s)) return "Direct";
+  return "Indirect";
+}
+
+/** Budget Direct/Indirect totals from a month node's per-dept category breakdown. */
+function budgetDirectIndirect(budgetMonth) {
+  const out = { Direct: 0, Indirect: 0, known: false };
+  for (const dept of Object.values(budgetMonth || {})) {
+    for (const c of dept?.categories || []) { out[classifyDI(c.name)] += c.count || 0; out.known = true; }
+  }
+  return out;
+}
+
+/** Actual Direct/Indirect headcount from the live employee register (uses grade, falls back to category/designation). */
+function actualDirectIndirect(employees) {
+  const out = { Direct: 0, Indirect: 0 };
+  for (const e of employees) out[classifyDI(e.grade || e.category || e.designation)]++;
+  return out;
+}
+
 export async function render(root) {
   let employees = [];
   let budgetMonth = null;
@@ -40,6 +70,8 @@ export async function render(root) {
   const monthInput = el("input", { type: "month", value: month, onchange: (e) => { month = e.target.value; watchMonth(); } });
   const chart = chartCard({ title: "Budget vs Actual by Department", type: "bar", datasets: [] });
   const utilChart = chartCard({ title: "Budget Utilization %", type: "bar", options: { indexAxis: "y", scales: { x: { beginAtZero: true } } }, datasets: [] });
+  const diChart = chartCard({ title: "Budget vs Actual — Direct / Indirect", type: "bar", datasets: [] });
+  const diHost = el("div");
   const tableHost = el("div");
 
   root.append(
@@ -52,6 +84,7 @@ export async function render(root) {
       editable ? el("button", { class: "btn btn-primary", onclick: () => editDept() }, "＋ Set budget") : null),
     kpis,
     el("div", { class: "grid grid-2" }, chart, utilChart),
+    el("div", { class: "grid grid-2" }, diChart, diHost),
     tableHost);
 
   pageWatch("employees", (v) => { employees = empList(v); refresh(); });
@@ -80,6 +113,15 @@ export async function render(root) {
       data: rows.map((r) => Number(Math.min(r.utilization, 150).toFixed(1))),
       backgroundColor: rows.map((r) => r.utilization > 100 ? C.bad : r.utilization >= 90 ? C.ok : r.utilization >= 70 ? C.warn : C.bad),
     }]);
+
+    // Direct / Indirect split — budget (from the wide file's category data) vs actual (from grade).
+    const bDI = budgetDirectIndirect(budgetMonth);
+    const aDI = actualDirectIndirect(activeEmps(employees));
+    diChart._update(["Direct", "Indirect"], [
+      { label: "Budget", data: [bDI.Direct, bDI.Indirect], color: C.violet },
+      { label: "Actual", data: [aDI.Direct, aDI.Indirect], color: C.brand },
+    ]);
+    diHost.replaceChildren(directIndirectCard(bDI, aDI));
 
     if (!rows.length) {
       tableHost.replaceChildren(emptyState("💰", "No budget set for this month",
@@ -115,6 +157,33 @@ export async function render(root) {
       ],
       rows,
     }));
+  }
+
+  /** Summary card: Direct vs Indirect budget/actual with variance. */
+  function directIndirectCard(bDI, aDI) {
+    const rowOf = (label) => {
+      const budget = bDI[label], actual = aDI[label], variance = actual - budget;
+      return el("div", { class: "stat-row" },
+        el("span", {}, label),
+        el("span", { style: { display: "flex", gap: "16px", minWidth: "180px", justifyContent: "flex-end" } },
+          el("span", { class: "muted" }, `Budget ${fmtNum(budget)}`),
+          el("span", {}, `Actual ${fmtNum(actual)}`),
+          el("strong", { class: variance > 0 ? "text-bad" : variance < 0 ? "text-warn" : "text-ok" }, (variance > 0 ? "+" : "") + fmtNum(variance))));
+    };
+    return el("div", { class: "card" },
+      el("div", { class: "card-head" }, el("h4", {}, "🧑‍🏭 Direct / Indirect Split")),
+      !bDI.known
+        ? el("p", { class: "muted", style: { fontSize: "12.5px", marginBottom: "8px" } },
+            "Budget split needs a detailed budget file with a Category column (Direct/Indirect). Showing actual headcount only.")
+        : null,
+      rowOf("Direct"),
+      rowOf("Indirect"),
+      el("div", { class: "stat-row", style: { borderTop: "1px solid var(--border)", marginTop: "4px", paddingTop: "8px" } },
+        el("strong", {}, "Total"),
+        el("span", { style: { display: "flex", gap: "16px", minWidth: "180px", justifyContent: "flex-end" } },
+          el("span", { class: "muted" }, `Budget ${fmtNum(bDI.Direct + bDI.Indirect)}`),
+          el("strong", {}, `Actual ${fmtNum(aDI.Direct + aDI.Indirect)}`),
+          el("span", {}, ""))));
   }
 
   /** Utilization bar where >100% shows red. */
