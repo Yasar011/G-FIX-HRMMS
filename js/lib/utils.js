@@ -23,6 +23,9 @@ export function parseYmd(s) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+/** True when a "YYYY-MM-DD" key falls on a Sunday. */
+export function isSunday(dateKey) { return parseYmd(dateKey).getDay() === 0; }
+
 /** Add `n` days to a "YYYY-MM-DD" key and return the new key. */
 export function addDays(dateKey, n) {
   const d = parseYmd(dateKey);

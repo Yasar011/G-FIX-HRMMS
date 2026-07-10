@@ -22,11 +22,11 @@ import { kpiGrid } from "../components/kpi.js";
 import { dropZone } from "../components/uploader.js";
 import { parseAttendanceWorkbook, importAttendance } from "../lib/importers.js";
 import {
-  el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo,
+  el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo, addDays, dateRange,
 } from "../lib/utils.js";
 import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
 
-const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1" };
+const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
 export async function render(root) {
   let employees = [];
@@ -43,6 +43,8 @@ export async function render(root) {
     { id: "present", label: "Present", icon: "✅", color: C.ok },
     { id: "absent", label: "Absent", icon: "🚫", color: C.bad },
     { id: "leave", label: "Leave", icon: "🌴", color: C.info },
+    { id: "halfDay", label: "Half Day", icon: "🌓", color: C.info },
+    { id: "holiday", label: "Holiday", icon: "🏖️", color: C.violet },
     { id: "late", label: "Late", icon: "⏰", color: C.warn },
     { id: "attPct", label: "Attendance %", icon: "📊", color: C.brand, dp: 1, suffix: "%" },
     { id: "ot", label: "OT Hours", icon: "⏱️", color: C.warn, dp: 1 },
@@ -51,6 +53,7 @@ export async function render(root) {
   /* ---------- tabs ---------- */
   const tabs = el("div", { class: "tabs" },
     tabBtn("daily", "Daily View"),
+    tabBtn("weekly", "Weekly Summary"),
     tabBtn("monthly", "Monthly Summary"));
   function tabBtn(id, label) {
     return el("button", {
@@ -125,6 +128,7 @@ export async function render(root) {
     }
     const scoped = view.dept ? employees.filter((e) => e.department === view.dept) : employees;
     if (view.tab === "daily") renderDaily(scoped);
+    else if (view.tab === "weekly") renderWeekly(scoped);
     else renderMonthly(scoped);
   }
 
@@ -148,9 +152,14 @@ export async function render(root) {
     if (view.dept) rows = rows.filter((r) => byId[r.empId]);
     if (view.shift) rows = rows.filter((r) => r.shift === view.shift);
 
-    const stats = dayStats(dayObj, scoped);
+    // Scope the KPI tiles to exactly the same set of rows the table shows —
+    // otherwise changing the Department/Shift filter leaves the tiles above unchanged.
+    const filteredIds = new Set(rows.map((r) => r.empId));
+    const scopedDayObj = Object.fromEntries(Object.entries(dayObj).filter(([id]) => filteredIds.has(id)));
+    const stats = dayStats(scopedDayObj, scoped);
     kpis._update({
-      present: stats.present, absent: stats.absent, leave: stats.leave, late: stats.late,
+      present: stats.present, absent: stats.absent, leave: stats.leave,
+      halfDay: stats.halfDay, holiday: stats.holiday, late: stats.late,
       attPct: { value: stats.attendancePct, sub: fmtDate(view.date) },
       ot: stats.otHours,
     });
@@ -199,6 +208,8 @@ export async function render(root) {
       present: totPresent,
       absent: rows.reduce((s, r) => s + r.absent, 0),
       leave: rows.reduce((s, r) => s + r.leave, 0),
+      halfDay: rows.reduce((s, r) => s + r.halfDay, 0),
+      holiday: rows.reduce((s, r) => s + r.holiday, 0),
       late: rows.reduce((s, r) => s + r.late, 0),
       attPct: { value: totMarked ? (totPresent / totMarked) * 100 : 0, sub: `${dates.length} working days` },
       ot: rows.reduce((s, r) => s + r.otHours, 0),
@@ -225,6 +236,58 @@ export async function render(root) {
       ],
       rows,
       empty: "No attendance uploaded for this month",
+    }));
+  }
+
+  /** 7-day rolling window ending on the Date filter (same shape as Monthly Summary). */
+  function renderWeekly(scoped) {
+    const dates = dateRange(addDays(view.date, -6), view.date);
+    const rows = activeEmps(scoped).map((e) => {
+      const a = employeeAttendance(e.id, attendance, dates);
+      return {
+        empId: e.id, name: e.name, department: e.department || "—",
+        present: a.present, absent: a.absent, leave: a.leave, late: a.late,
+        halfDay: a.halfDay, holiday: a.holiday,
+        workHrs: Number((a.workMin / 60).toFixed(1)),
+        otHours: Number(a.otHours.toFixed(1)),
+        attPct: Number(a.attendancePct.toFixed(1)),
+      };
+    }).filter((r) => r.present + r.absent + r.leave + r.halfDay > 0);
+
+    const totPresent = rows.reduce((s, r) => s + r.present, 0);
+    const totMarked = rows.reduce((s, r) => s + r.present + r.absent + r.leave + r.halfDay, 0);
+    kpis._update({
+      present: totPresent,
+      absent: rows.reduce((s, r) => s + r.absent, 0),
+      leave: rows.reduce((s, r) => s + r.leave, 0),
+      halfDay: rows.reduce((s, r) => s + r.halfDay, 0),
+      holiday: rows.reduce((s, r) => s + r.holiday, 0),
+      late: rows.reduce((s, r) => s + r.late, 0),
+      attPct: { value: totMarked ? (totPresent / totMarked) * 100 : 0, sub: `${fmtDate(dates[0])} → ${fmtDate(view.date)}` },
+      ot: rows.reduce((s, r) => s + r.otHours, 0),
+    });
+
+    tableHost.replaceChildren(dataTable({
+      title: `Weekly Summary — ${fmtDate(dates[0])} → ${fmtDate(view.date)}`,
+      exportName: `attendance_weekly_${view.date}`,
+      pageSize: 20,
+      onRowClick: (r) => openHistory(r.empId, r.name),
+      columns: [
+        { key: "empId", label: "ID" },
+        { key: "name", label: "Name" },
+        { key: "department", label: "Department" },
+        { key: "present", label: "Present", align: "right" },
+        { key: "absent", label: "Absent", align: "right" },
+        { key: "leave", label: "Leave", align: "right" },
+        { key: "late", label: "Late", align: "right" },
+        { key: "halfDay", label: "Half Day", align: "right" },
+        { key: "holiday", label: "Holiday", align: "right" },
+        { key: "workHrs", label: "Work Hrs", align: "right" },
+        { key: "otHours", label: "OT Hrs", align: "right" },
+        { key: "attPct", label: "Att %", align: "right", render: (r) => el("strong", { class: r.attPct >= 95 ? "text-ok" : r.attPct >= 85 ? "text-warn" : "text-bad" }, fmtPct(r.attPct)) },
+      ],
+      rows,
+      empty: "No attendance uploaded for this week",
     }));
   }
 

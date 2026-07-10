@@ -20,7 +20,7 @@
 import { dbUpdate, dbPush, getCached } from "./store.js";
 import { notify } from "./notify.js";
 import { currentUser } from "./auth.js";
-import { ymd, hmToMin, fmtDate, fmtPct, sanitizeKey } from "./utils.js";
+import { ymd, hmToMin, fmtDate, fmtPct, sanitizeKey, isSunday } from "./utils.js";
 import { dayStats } from "./metrics.js";
 import { track } from "./firebase.js";
 
@@ -288,7 +288,11 @@ export async function parseAttendanceWorkbook(file, { settings = {}, year } = {}
  */
 export async function importAttendance(parsed, { employees = [], settings = {} } = {}) {
   const updates = {};
-  for (const { empId, date, record } of parsed.records) updates[`${date}/${empId}`] = record;
+  // The plant doesn't operate on Sundays — mark every Sunday as a holiday
+  // regardless of what status the sheet carries (hours/OT, if any, are kept).
+  for (const { empId, date, record } of parsed.records) {
+    updates[`${date}/${empId}`] = isSunday(date) && record.status !== "H" ? { ...record, status: "H" } : record;
+  }
   await dbUpdate("attendance", updates);
 
   // Merge (never overwrite unrelated fields) any employee master data found in the sheet.

@@ -115,6 +115,22 @@ function breakdownCard(title, icon, budgetItems, actualMap = null, opts = {}) {
           "No breakdown for this month — upload a detailed multi-month budget export to see this."));
 }
 
+/** Simple headcount-by-field card (no budget comparison) — e.g. Direct vs Indirect. */
+function simpleCountCard(title, icon, members, sel) {
+  const counts = actualCountsBy(members, sel);
+  const total = members.length;
+  const rows = [...counts.values()].sort((a, b) => b.count - a.count);
+  return el("div", { class: "card" },
+    el("div", { class: "card-head" }, el("h4", {}, `${icon} ${title}`)),
+    rows.length
+      ? el("div", {}, ...rows.map((r) => el("div", { class: "stat-row" },
+          el("span", {}, r.label),
+          el("span", { style: { display: "flex", gap: "10px", alignItems: "center", minWidth: "110px", justifyContent: "flex-end" } },
+            el("small", { class: "muted" }, fmtPct(total ? (r.count / total) * 100 : 0)),
+            el("strong", {}, fmtNum(r.count))))))
+      : el("p", { class: "muted", style: { fontSize: "12.5px" } }, "No grade data yet — upload an attendance sheet that includes it."));
+}
+
 export async function render(root, params = []) {
   const dept = params[0] ? decodeURIComponent(params[0]) : null;
   const scope = deptScope();
@@ -297,7 +313,8 @@ function renderDetail(root, dept) {
       breakdownCard("Budget by Category", "🏷️", b?.categories, actualCountsBy(members, (e) => e.category),
         { aliases: deptAliases.categories || {}, onMap: (k, label) => mapUnmatched("categories", b?.categories, k, label) }),
       breakdownCard("Budget by Local / Expat", "🌍", b?.localExpat, actualCountsBy(members, (e) => e.nationality),
-        { aliases: deptAliases.localExpat || {}, onMap: (k, label) => mapUnmatched("localExpat", b?.localExpat, k, label) }));
+        { aliases: deptAliases.localExpat || {}, onMap: (k, label) => mapUnmatched("localExpat", b?.localExpat, k, label) }),
+      simpleCountCard("Direct / Indirect", "🧑‍🏭", members, (e) => e.grade));
 
     // Daily trend scoped to this department
     const scoped = members;
