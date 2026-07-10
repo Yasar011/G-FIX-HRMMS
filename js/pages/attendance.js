@@ -75,13 +75,21 @@ export async function render(root) {
     { id: "shift", label: "Shift", type: "select", options: allOptions([]) },
   ], (v) => { Object.assign(view, { date: v.date, month: v.month, dept: v.dept, shift: v.shift }); refresh(); });
 
+  const avgHost = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "4px 0 12px" } });
   const tableHost = el("div");
   const uploadsHost = el("div");
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "Attendance"), el("div", { class: "spacer" }), uploadBtn),
-    kpis, tabs, filters, tableHost,
+    kpis, tabs, filters, avgHost, tableHost,
     el("div", { class: "section-label" }, "Upload History"),
     uploadsHost);
+
+  /** Render a labelled chip row of averages/totals above the table. */
+  function showAverages(chips) {
+    avgHost.replaceChildren(
+      el("span", { class: "muted", style: { fontSize: "12px", alignSelf: "center" } }, "Summary:"),
+      ...chips.map((c) => el("span", { class: "chip" }, `${c.label}: ${c.value}`)));
+  }
 
   /* ---------- realtime data ---------- */
   pageWatch("settings", (s) => { settings = s || {}; });
@@ -141,6 +149,7 @@ export async function render(root) {
         empId: id,
         name: byId[id]?.name || r.name || id,
         department: byId[id]?.department || "—",
+        category: byId[id]?.category || "—",
         section: byId[id]?.section || "—",
         shift: r.shift || "—",
         status: r.status,
@@ -173,6 +182,7 @@ export async function render(root) {
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
         { key: "department", label: "Department" },
+        { key: "category", label: "Category" },
         { key: "section", label: "Section" },
         { key: "shift", label: "Shift" },
         { key: "status", label: "Status", render: (r) => badge(ATT_STATUS[r.status] || r.status, statusTone(r.status)), exportVal: (r) => ATT_STATUS[r.status] || r.status },
@@ -186,76 +196,57 @@ export async function render(root) {
       rows,
       empty: "No attendance uploaded for this date",
     }));
+
+    showAverages([
+      { label: "Marked", value: stats.marked },
+      { label: "Attendance %", value: fmtPct(stats.attendancePct) },
+      { label: "Avg Work Hrs", value: fmtNum(stats.avgWorkMin / 60, 1) },
+      { label: "Total OT Hrs", value: fmtNum(stats.otHours, 1) },
+      { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
+    ]);
   }
 
   function renderMonthly(scoped) {
     const dates = monthDates(attendance, view.month);
-    const rows = activeEmps(scoped).map((e) => {
-      const a = employeeAttendance(e.id, attendance, dates);
-      return {
-        empId: e.id, name: e.name, department: e.department || "—",
-        present: a.present, absent: a.absent, leave: a.leave, late: a.late,
-        halfDay: a.halfDay, holiday: a.holiday,
-        workHrs: Number((a.workMin / 60).toFixed(1)),
-        otHours: Number(a.otHours.toFixed(1)),
-        attPct: Number(a.attendancePct.toFixed(1)),
-      };
-    }).filter((r) => r.present + r.absent + r.leave + r.halfDay > 0 || dates.length === 0);
-
-    const totPresent = rows.reduce((s, r) => s + r.present, 0);
-    const totMarked = rows.reduce((s, r) => s + r.present + r.absent + r.leave + r.halfDay, 0);
-    kpis._update({
-      present: totPresent,
-      absent: rows.reduce((s, r) => s + r.absent, 0),
-      leave: rows.reduce((s, r) => s + r.leave, 0),
-      halfDay: rows.reduce((s, r) => s + r.halfDay, 0),
-      holiday: rows.reduce((s, r) => s + r.holiday, 0),
-      late: rows.reduce((s, r) => s + r.late, 0),
-      attPct: { value: totMarked ? (totPresent / totMarked) * 100 : 0, sub: `${dates.length} working days` },
-      ot: rows.reduce((s, r) => s + r.otHours, 0),
-    });
-
-    tableHost.replaceChildren(dataTable({
+    renderSummary(scoped, dates, {
       title: `Monthly Summary — ${view.month}`,
       exportName: `attendance_monthly_${view.month}`,
-      pageSize: 20,
-      onRowClick: (r) => openHistory(r.empId, r.name),
-      columns: [
-        { key: "empId", label: "ID" },
-        { key: "name", label: "Name" },
-        { key: "department", label: "Department" },
-        { key: "present", label: "Present", align: "right" },
-        { key: "absent", label: "Absent", align: "right" },
-        { key: "leave", label: "Leave", align: "right" },
-        { key: "late", label: "Late", align: "right" },
-        { key: "halfDay", label: "Half Day", align: "right" },
-        { key: "holiday", label: "Holiday", align: "right" },
-        { key: "workHrs", label: "Work Hrs", align: "right" },
-        { key: "otHours", label: "OT Hrs", align: "right" },
-        { key: "attPct", label: "Att %", align: "right", render: (r) => el("strong", { class: r.attPct >= 95 ? "text-ok" : r.attPct >= 85 ? "text-warn" : "text-bad" }, fmtPct(r.attPct)) },
-      ],
-      rows,
+      attSub: `${dates.length} working days`,
       empty: "No attendance uploaded for this month",
-    }));
+      keepEmpty: dates.length === 0,
+    });
   }
 
-  /** 7-day rolling window ending on the Date filter (same shape as Monthly Summary). */
+  /** 7-day rolling window ending on the Date filter. */
   function renderWeekly(scoped) {
     const dates = dateRange(addDays(view.date, -6), view.date);
+    renderSummary(scoped, dates, {
+      title: `Weekly Summary — ${fmtDate(dates[0])} → ${fmtDate(view.date)}`,
+      exportName: `attendance_weekly_${view.date}`,
+      attSub: `${fmtDate(dates[0])} → ${fmtDate(view.date)}`,
+      empty: "No attendance uploaded for this week",
+    });
+  }
+
+  /** Shared per-employee summary table (weekly/monthly) with Category column + averages. */
+  function renderSummary(scoped, dates, opts) {
     const rows = activeEmps(scoped).map((e) => {
       const a = employeeAttendance(e.id, attendance, dates);
       return {
-        empId: e.id, name: e.name, department: e.department || "—",
+        empId: e.id, name: e.name, department: e.department || "—", category: e.category || "—",
         present: a.present, absent: a.absent, leave: a.leave, late: a.late,
         halfDay: a.halfDay, holiday: a.holiday,
         workHrs: Number((a.workMin / 60).toFixed(1)),
         otHours: Number(a.otHours.toFixed(1)),
         attPct: Number(a.attendancePct.toFixed(1)),
       };
-    }).filter((r) => r.present + r.absent + r.leave + r.halfDay > 0);
+    }).filter((r) => r.present + r.absent + r.leave + r.halfDay > 0 || opts.keepEmpty);
 
     const totPresent = rows.reduce((s, r) => s + r.present, 0);
     const totMarked = rows.reduce((s, r) => s + r.present + r.absent + r.leave + r.halfDay, 0);
+    const totOt = rows.reduce((s, r) => s + r.otHours, 0);
+    const avgAtt = rows.length ? rows.reduce((s, r) => s + r.attPct, 0) / rows.length : 0;
+    const avgWork = rows.length ? rows.reduce((s, r) => s + r.workHrs, 0) / rows.length : 0;
     kpis._update({
       present: totPresent,
       absent: rows.reduce((s, r) => s + r.absent, 0),
@@ -263,19 +254,20 @@ export async function render(root) {
       halfDay: rows.reduce((s, r) => s + r.halfDay, 0),
       holiday: rows.reduce((s, r) => s + r.holiday, 0),
       late: rows.reduce((s, r) => s + r.late, 0),
-      attPct: { value: totMarked ? (totPresent / totMarked) * 100 : 0, sub: `${fmtDate(dates[0])} → ${fmtDate(view.date)}` },
-      ot: rows.reduce((s, r) => s + r.otHours, 0),
+      attPct: { value: totMarked ? (totPresent / totMarked) * 100 : 0, sub: opts.attSub },
+      ot: totOt,
     });
 
     tableHost.replaceChildren(dataTable({
-      title: `Weekly Summary — ${fmtDate(dates[0])} → ${fmtDate(view.date)}`,
-      exportName: `attendance_weekly_${view.date}`,
+      title: opts.title,
+      exportName: opts.exportName,
       pageSize: 20,
       onRowClick: (r) => openHistory(r.empId, r.name),
       columns: [
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
         { key: "department", label: "Department" },
+        { key: "category", label: "Category" },
         { key: "present", label: "Present", align: "right" },
         { key: "absent", label: "Absent", align: "right" },
         { key: "leave", label: "Leave", align: "right" },
@@ -287,8 +279,16 @@ export async function render(root) {
         { key: "attPct", label: "Att %", align: "right", render: (r) => el("strong", { class: r.attPct >= 95 ? "text-ok" : r.attPct >= 85 ? "text-warn" : "text-bad" }, fmtPct(r.attPct)) },
       ],
       rows,
-      empty: "No attendance uploaded for this week",
+      empty: opts.empty,
     }));
+
+    showAverages([
+      { label: "Employees", value: rows.length },
+      { label: "Avg Attendance %", value: fmtPct(avgAtt) },
+      { label: "Avg Work Hrs", value: fmtNum(avgWork, 1) },
+      { label: "Total OT Hrs", value: fmtNum(totOt, 1) },
+      { label: "Avg OT/Employee", value: fmtNum(rows.length ? totOt / rows.length : 0, 1) },
+    ]);
   }
 
   /* ---------- employee history modal ---------- */
