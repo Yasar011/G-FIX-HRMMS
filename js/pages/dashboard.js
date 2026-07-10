@@ -23,51 +23,54 @@ export async function render(root) {
   const scope = deptScope(); // dept managers see their department only
   const view = { from: today(), to: today() };
 
+  /* ---------- navigation helpers ---------- */
+  const go = (hash) => () => { location.hash = hash; };
+
   /* ---------- KPI sections ---------- */
   const todayKpis = kpiGrid([
-    { id: "present", label: "Present", icon: "✅", color: C.ok },
-    { id: "absent", label: "Absent", icon: "🚫", color: C.bad },
-    { id: "leave", label: "Leave", icon: "🌴", color: C.info },
-    { id: "late", label: "Late", icon: "⏰", color: C.warn },
-    { id: "earlyOut", label: "Early Out", icon: "🚪", color: C.warn },
-    { id: "halfDay", label: "Half Day", icon: "🌗", color: C.violet },
-    { id: "wfh", label: "Work From Home", icon: "🏡", color: C.info },
-    { id: "holiday", label: "Holiday", icon: "🎌", color: C.pink },
-    { id: "attPct", label: "Attendance %", icon: "📊", color: C.brand, dp: 1, suffix: "%" },
-    { id: "avgWork", label: "Avg Working Hours", icon: "🕒", color: C.brand, dp: 1 },
+    { id: "present", label: "Present", icon: "✅", color: C.ok, onClick: go("#/attendance") },
+    { id: "absent", label: "Absent", icon: "🚫", color: C.bad, onClick: go("#/attendance") },
+    { id: "leave", label: "Leave", icon: "🌴", color: C.info, onClick: go("#/leaves") },
+    { id: "late", label: "Late", icon: "⏰", color: C.warn, onClick: go("#/attendance") },
+    { id: "earlyOut", label: "Early Out", icon: "🚪", color: C.warn, onClick: go("#/attendance") },
+    { id: "halfDay", label: "Half Day", icon: "🌗", color: C.violet, onClick: go("#/attendance") },
+    { id: "wfh", label: "Work From Home", icon: "🏡", color: C.info, onClick: go("#/attendance") },
+    { id: "holiday", label: "Holiday", icon: "🎌", color: C.pink, onClick: go("#/attendance") },
+    { id: "attPct", label: "Attendance %", icon: "📊", color: C.brand, dp: 1, suffix: "%", onClick: go("#/attendance") },
+    { id: "avgWork", label: "Avg Working Hours", icon: "🕒", color: C.brand, dp: 1, onClick: go("#/attendance") },
   ]);
 
   const workforceKpis = kpiGrid([
-    { id: "headcount", label: "Current Headcount", icon: "👥", color: C.brand },
-    { id: "budgetHc", label: "Budget Headcount", icon: "🎯", color: C.violet },
-    { id: "vacancies", label: "Vacancies", icon: "🪑", color: C.warn },
-    { id: "filledPct", label: "Budget Filled %", icon: "📦", color: C.ok },
-    { id: "exceeded", label: "Budget Exceeded (Depts)", icon: "🚨", color: C.bad },
-    { id: "departments", label: "Departments", icon: "🏭", color: C.info },
-    { id: "newJoiners", label: "New Joiners (MTD)", icon: "🎉", color: C.ok },
-    { id: "resigned", label: "Resigned (MTD)", icon: "👋", color: C.bad },
-    { id: "notice", label: "Notice Period", icon: "📮", color: C.warn },
-    { id: "inactive", label: "Inactive Employees", icon: "💤", color: C.bad },
+    { id: "headcount", label: "Current Headcount", icon: "👥", color: C.brand, onClick: go("#/employees") },
+    { id: "budgetHc", label: "Budget Headcount", icon: "🎯", color: C.violet, onClick: go("#/budget") },
+    { id: "vacancies", label: "Vacancies", icon: "🪑", color: C.warn, onClick: go("#/recruitment") },
+    { id: "filledPct", label: "Budget Filled %", icon: "📦", color: C.ok, onClick: go("#/budget") },
+    { id: "exceeded", label: "Budget Exceeded (Depts)", icon: "🚨", color: C.bad, onClick: go("#/budget") },
+    { id: "departments", label: "Departments", icon: "🏭", color: C.info, onClick: go("#/departments") },
+    { id: "newJoiners", label: "New Joiners (MTD)", icon: "🎉", color: C.ok, onClick: go("#/employees") },
+    { id: "resigned", label: "Resigned (MTD)", icon: "👋", color: C.bad, onClick: go("#/attrition") },
+    { id: "notice", label: "Notice Period", icon: "📮", color: C.warn, onClick: go("#/attrition") },
+    { id: "inactive", label: "Inactive Employees", icon: "💤", color: C.bad, onClick: go("#/employees") },
   ]);
 
   const demoKpis = kpiGrid([
-    { id: "male", label: "Male Employees", icon: "👨", color: C.info },
-    { id: "female", label: "Female Employees", icon: "👩", color: C.pink },
-    { id: "permanent", label: "Permanent", icon: "🧷", color: C.ok },
-    { id: "contract", label: "Contract", icon: "📄", color: C.warn },
-    { id: "local", label: "Local", icon: "🏠", color: C.brand },
-    { id: "expat", label: "Expat", icon: "✈️", color: C.violet },
-    { id: "categories", label: "Employee Categories", icon: "🏷️", color: C.info },
-    { id: "avgExp", label: "Avg Experience (yrs)", icon: "📚", color: C.brand, dp: 1 },
-    { id: "avgAge", label: "Avg Age (yrs)", icon: "🎂", color: C.pink, dp: 1 },
-    { id: "birthdays", label: "Birthdays (7 days)", icon: "🎈", color: C.pink },
-    { id: "anniversaries", label: "Anniversaries (7 days)", icon: "🏅", color: C.ok },
+    { id: "male", label: "Male Employees", icon: "👨", color: C.info, onClick: go("#/employees") },
+    { id: "female", label: "Female Employees", icon: "👩", color: C.pink, onClick: go("#/employees") },
+    { id: "permanent", label: "Permanent", icon: "🧷", color: C.ok, onClick: go("#/employees") },
+    { id: "contract", label: "Contract", icon: "📄", color: C.warn, onClick: go("#/employees") },
+    { id: "local", label: "Local", icon: "🏠", color: C.brand, onClick: go("#/employees") },
+    { id: "expat", label: "Expat", icon: "✈️", color: C.violet, onClick: go("#/employees") },
+    { id: "categories", label: "Employee Categories", icon: "🏷️", color: C.info, onClick: go("#/employees") },
+    { id: "avgExp", label: "Avg Experience (yrs)", icon: "📚", color: C.brand, dp: 1, onClick: go("#/employees") },
+    { id: "avgAge", label: "Avg Age (yrs)", icon: "🎂", color: C.pink, dp: 1, onClick: go("#/employees") },
+    { id: "birthdays", label: "Birthdays (7 days)", icon: "🎈", color: C.pink, onClick: go("#/employees") },
+    { id: "anniversaries", label: "Anniversaries (7 days)", icon: "🏅", color: C.ok, onClick: go("#/employees") },
   ]);
 
   const otKpis = kpiGrid([
-    { id: "avgOt", label: "Avg OT Hours (MTD)", icon: "⏱️", color: C.warn, dp: 1 },
-    { id: "otToday", label: "Today's OT Cost", icon: "💸", color: C.orange },
-    { id: "otMonth", label: "Monthly OT Cost", icon: "💰", color: C.bad },
+    { id: "avgOt", label: "Avg OT Hours (MTD)", icon: "⏱️", color: C.warn, dp: 1, onClick: go("#/overtime") },
+    { id: "otToday", label: "Today's OT Cost", icon: "💸", color: C.orange, onClick: go("#/overtime") },
+    { id: "otMonth", label: "Monthly OT Cost", icon: "💰", color: C.bad, onClick: go("#/overtime") },
   ]);
 
   /* ---------- Charts ---------- */

@@ -32,22 +32,34 @@ export async function render(root) {
   let employees = [];
   let attendance = {};
   let settings = {};
-  let view = { date: today(), month: ym(), from: `${ym()}-01`, to: today(), dept: "", shift: "", tab: "daily" };
+  let view = { date: today(), month: ym(), from: `${ym()}-01`, to: today(), dept: "", shift: "", tab: "daily", rowFilter: null };
 
   /* ---------- header + upload ---------- */
   const uploadBtn = can("upload_attendance")
     ? el("button", { class: "btn btn-primary", onclick: () => openUpload() }, "⬆ Upload Excel")
     : null;
 
+  /** Switch to a tab (used by both the tab buttons and KPI-tile clicks). */
+  function switchTab(id) {
+    view.tab = id;
+    tabs.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+    refresh();
+  }
+  /** Jump to Daily View filtered to one status/flag — the KPI tiles drill into this. */
+  function filterDaily(key, value) {
+    view.rowFilter = { key, value };
+    switchTab("daily");
+  }
+
   const kpis = kpiGrid([
-    { id: "present", label: "Present", icon: "✅", color: C.ok },
-    { id: "absent", label: "Absent", icon: "🚫", color: C.bad },
-    { id: "leave", label: "Leave", icon: "🌴", color: C.info },
-    { id: "halfDay", label: "Half Day", icon: "🌓", color: C.info },
-    { id: "holiday", label: "Holiday", icon: "🏖️", color: C.violet },
-    { id: "late", label: "Late", icon: "⏰", color: C.warn },
+    { id: "present", label: "Present", icon: "✅", color: C.ok, onClick: () => filterDaily("status", "P") },
+    { id: "absent", label: "Absent", icon: "🚫", color: C.bad, onClick: () => filterDaily("status", "A") },
+    { id: "leave", label: "Leave", icon: "🌴", color: C.info, onClick: () => { location.hash = "#/leaves"; } },
+    { id: "halfDay", label: "Half Day", icon: "🌓", color: C.info, onClick: () => filterDaily("status", "HD") },
+    { id: "holiday", label: "Holiday", icon: "🏖️", color: C.violet, onClick: () => filterDaily("status", "H") },
+    { id: "late", label: "Late", icon: "⏰", color: C.warn, onClick: () => filterDaily("late", "Yes") },
     { id: "attPct", label: "Attendance %", icon: "📊", color: C.brand, dp: 1, suffix: "%" },
-    { id: "ot", label: "OT Hours", icon: "⏱️", color: C.warn, dp: 1 },
+    { id: "ot", label: "OT Hours", icon: "⏱️", color: C.warn, dp: 1, onClick: () => { location.hash = "#/overtime"; } },
   ]);
 
   /* ---------- tabs ---------- */
@@ -58,13 +70,8 @@ export async function render(root) {
     tabBtn("range", "Custom Range"));
   function tabBtn(id, label) {
     return el("button", {
-      class: `tab ${view.tab === id ? "active" : ""}`,
-      onclick: (e) => {
-        view.tab = id;
-        tabs.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-        e.target.classList.add("active");
-        refresh();
-      },
+      class: `tab ${view.tab === id ? "active" : ""}`, "data-tab": id,
+      onclick: () => { view.rowFilter = null; switchTab(id); },
     }, label);
   }
 
@@ -79,13 +86,22 @@ export async function render(root) {
   ], (v) => { Object.assign(view, { date: v.date, month: v.month, from: v.from, to: v.to, dept: v.dept, shift: v.shift }); refresh(); });
 
   const avgHost = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "4px 0 12px" } });
+  const filterHost = el("div");
   const tableHost = el("div");
   const uploadsHost = el("div");
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "Attendance"), el("div", { class: "spacer" }), uploadBtn),
-    kpis, tabs, filters, avgHost, tableHost,
+    kpis, tabs, filters, avgHost, filterHost, tableHost,
     el("div", { class: "section-label" }, "Upload History"),
     uploadsHost);
+
+  /** Show/hide the "drilled into <status> — Clear" banner above the Daily table. */
+  function showFilterBanner(label) {
+    if (!label) { filterHost.replaceChildren(); return; }
+    filterHost.replaceChildren(el("div", { class: "chip", style: { marginBottom: "10px" } },
+      `Filtered: ${label} `,
+      el("button", { class: "btn btn-sm btn-ghost", style: { padding: "0 6px", marginLeft: "6px" }, onclick: () => { view.rowFilter = null; refresh(); } }, "✕ Clear")));
+  }
 
   /** Render a labelled chip row of averages/totals above the table. */
   function showAverages(chips) {
@@ -137,6 +153,7 @@ export async function render(root) {
       tableHost.replaceChildren(emptyState("🗂️", "No attendance data yet", "Upload an Excel sheet to get started."));
       return;
     }
+    if (view.tab !== "daily") { filterHost.replaceChildren(); view.rowFilter = null; }
     const scoped = view.dept ? employees.filter((e) => e.department === view.dept) : employees;
     if (view.tab === "daily") renderDaily(scoped);
     else if (view.tab === "weekly") renderWeekly(scoped);
@@ -177,6 +194,9 @@ export async function render(root) {
       ot: stats.otHours,
     });
 
+    // A KPI-tile click drills the TABLE (not the totals above) into one status/flag.
+    const tableRows = view.rowFilter ? rows.filter((r) => r[view.rowFilter.key] === view.rowFilter.value) : rows;
+
     const summary = [
       { label: "Present", value: stats.present }, { label: "Absent", value: stats.absent },
       { label: "Leave", value: stats.leave }, { label: "Half Day", value: stats.halfDay },
@@ -187,8 +207,11 @@ export async function render(root) {
       { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
     ];
 
+    const filterLabels = { status: { P: "Present", A: "Absent", L: "Leave", HD: "Half Day", H: "Holiday" }, late: { Yes: "Late" } };
+    showFilterBanner(view.rowFilter ? filterLabels[view.rowFilter.key]?.[view.rowFilter.value] || String(view.rowFilter.value) : null);
+
     tableHost.replaceChildren(dataTable({
-      title: `Daily Attendance — ${fmtDate(view.date)}`,
+      title: `Daily Attendance — ${fmtDate(view.date)}${view.rowFilter ? ` (${filterLabels[view.rowFilter.key]?.[view.rowFilter.value] || view.rowFilter.value} only)` : ""}`,
       exportName: `attendance_${view.date}`,
       pageSize: 20,
       onRowClick: (r) => openHistory(r.empId, r.name),
@@ -208,8 +231,8 @@ export async function render(root) {
         { key: "late", label: "Late", render: (r) => r.late ? badge("Late", "warn") : "—" },
         { key: "earlyOut", label: "Early Out", render: (r) => r.earlyOut ? badge("Early", "warn") : "—" },
       ],
-      rows,
-      empty: "No attendance uploaded for this date",
+      rows: tableRows,
+      empty: view.rowFilter ? "No records match this filter" : "No attendance uploaded for this date",
     }));
 
     showAverages(summary);

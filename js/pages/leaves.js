@@ -19,17 +19,22 @@ export async function render(root) {
   const approver = can("approve_leaves");
   const scope = deptScope();
   let employees = [];
+  let listFilter = null; // "pending" | "approvedMtd" | "onLeaveToday" | null — set by clicking a KPI tile
   const portalLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
 
   const kpis = kpiGrid([
-    { id: "pending", label: "Pending Approval", icon: "⏳", color: C.warn },
-    { id: "approvedMtd", label: "Approved (MTD)", icon: "✅", color: C.ok },
+    { id: "pending", label: "Pending Approval", icon: "⏳", color: C.warn, onClick: () => setListFilter("pending") },
+    { id: "approvedMtd", label: "Approved (MTD)", icon: "✅", color: C.ok, onClick: () => setListFilter("approvedMtd") },
     { id: "daysMtd", label: "Leave Days (MTD)", icon: "🌴", color: C.info },
-    { id: "onLeaveToday", label: "On Leave Today", icon: "🏖️", color: C.brand },
+    { id: "onLeaveToday", label: "On Leave Today", icon: "🏖️", color: C.brand, onClick: () => setListFilter("onLeaveToday") },
   ]);
   const typeChart = chartCard({ title: "Leave Analysis by Type", type: "doughnut", datasets: [] });
   const trendChart = chartCard({ title: "Leave Days Trend (12 months)", type: "bar", datasets: [] });
+  const filterHost = el("div");
   const tableHost = el("div");
+  let renderTable = () => {}; // set once pageWatchAll has data; re-invoked by setListFilter
+
+  function setListFilter(id) { listFilter = listFilter === id ? null : id; renderTable(); }
 
   const linkInput = el("input", { type: "text", value: portalLink, readonly: "", style: { flex: 1 } });
   const linkCard = el("div", { class: "card", style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } },
@@ -53,7 +58,10 @@ export async function render(root) {
     linkCard,
     kpis,
     el("div", { class: "grid grid-2" }, typeChart, trendChart),
+    filterHost,
     tableHost);
+
+  const FILTER_LABELS = { pending: "Pending Approval", approvedMtd: "Approved (This Month)", onLeaveToday: "On Leave Today" };
 
   pageWatchAll(["employees", "leaves"], (data) => {
     employees = empList(data.employees);
@@ -79,8 +87,18 @@ export async function render(root) {
       color: C.info,
     }]);
 
-    tableHost.replaceChildren(dataTable({
-      title: "Leave Requests",
+    renderTable = () => {
+      filterHost.replaceChildren(listFilter ? el("div", { class: "chip", style: { marginBottom: "10px" } },
+        `Filtered: ${FILTER_LABELS[listFilter]} `,
+        el("button", { class: "btn btn-sm btn-ghost", style: { padding: "0 6px", marginLeft: "6px" }, onclick: () => setListFilter(listFilter) }, "✕ Clear")) : null);
+
+      const rows = listFilter === "pending" ? leaves.filter((l) => l.status === "pending")
+        : listFilter === "approvedMtd" ? approved.filter((l) => l.from?.startsWith(month) || l.to?.startsWith(month))
+        : listFilter === "onLeaveToday" ? approved.filter((l) => l.from <= today() && l.to >= today())
+        : leaves;
+
+      tableHost.replaceChildren(dataTable({
+      title: `Leave Requests${listFilter ? ` — ${FILTER_LABELS[listFilter]}` : ""}`,
       exportName: "leaves",
       pageSize: 15,
       summary: [
@@ -121,9 +139,11 @@ export async function render(root) {
           exportVal: (r) => r.approvedBy || "",
         },
       ],
-      rows: leaves.sort((a, b) => (b.appliedAt || 0) - (a.appliedAt || 0)),
-      empty: "No leave requests",
-    }));
+      rows: rows.slice().sort((a, b) => (b.appliedAt || 0) - (a.appliedAt || 0)),
+      empty: listFilter ? "No leave requests match this filter" : "No leave requests",
+      }));
+    };
+    renderTable();
   });
 
   /** Approve/reject and (on approve) mark attendance L (or HD for half-day) for the range. */
