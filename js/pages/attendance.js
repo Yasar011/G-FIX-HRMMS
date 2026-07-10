@@ -32,7 +32,7 @@ export async function render(root) {
   let employees = [];
   let attendance = {};
   let settings = {};
-  let view = { date: today(), month: ym(), dept: "", shift: "", tab: "daily" };
+  let view = { date: today(), month: ym(), from: `${ym()}-01`, to: today(), dept: "", shift: "", tab: "daily" };
 
   /* ---------- header + upload ---------- */
   const uploadBtn = can("upload_attendance")
@@ -54,7 +54,8 @@ export async function render(root) {
   const tabs = el("div", { class: "tabs" },
     tabBtn("daily", "Daily View"),
     tabBtn("weekly", "Weekly Summary"),
-    tabBtn("monthly", "Monthly Summary"));
+    tabBtn("monthly", "Monthly Summary"),
+    tabBtn("range", "Custom Range"));
   function tabBtn(id, label) {
     return el("button", {
       class: `tab ${view.tab === id ? "active" : ""}`,
@@ -71,9 +72,11 @@ export async function render(root) {
   const filters = filterBar([
     { id: "date", label: "Date", type: "date", value: view.date },
     { id: "month", label: "Month", type: "month", value: view.month },
+    { id: "from", label: "From", type: "date", value: view.from },
+    { id: "to", label: "To", type: "date", value: view.to },
     { id: "dept", label: "Department", type: "select", options: allOptions([]) },
     { id: "shift", label: "Shift", type: "select", options: allOptions([]) },
-  ], (v) => { Object.assign(view, { date: v.date, month: v.month, dept: v.dept, shift: v.shift }); refresh(); });
+  ], (v) => { Object.assign(view, { date: v.date, month: v.month, from: v.from, to: v.to, dept: v.dept, shift: v.shift }); refresh(); });
 
   const avgHost = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "4px 0 12px" } });
   const tableHost = el("div");
@@ -137,6 +140,7 @@ export async function render(root) {
     const scoped = view.dept ? employees.filter((e) => e.department === view.dept) : employees;
     if (view.tab === "daily") renderDaily(scoped);
     else if (view.tab === "weekly") renderWeekly(scoped);
+    else if (view.tab === "range") renderRange(scoped);
     else renderMonthly(scoped);
   }
 
@@ -173,11 +177,22 @@ export async function render(root) {
       ot: stats.otHours,
     });
 
+    const summary = [
+      { label: "Present", value: stats.present }, { label: "Absent", value: stats.absent },
+      { label: "Leave", value: stats.leave }, { label: "Half Day", value: stats.halfDay },
+      { label: "Marked", value: stats.marked },
+      { label: "Attendance %", value: fmtPct(stats.attendancePct) },
+      { label: "Avg Work Hrs", value: fmtNum(stats.avgWorkMin / 60, 1) },
+      { label: "Total OT Hrs", value: fmtNum(stats.otHours, 1) },
+      { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
+    ];
+
     tableHost.replaceChildren(dataTable({
       title: `Daily Attendance — ${fmtDate(view.date)}`,
       exportName: `attendance_${view.date}`,
       pageSize: 20,
       onRowClick: (r) => openHistory(r.empId, r.name),
+      summary,
       columns: [
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
@@ -197,13 +212,7 @@ export async function render(root) {
       empty: "No attendance uploaded for this date",
     }));
 
-    showAverages([
-      { label: "Marked", value: stats.marked },
-      { label: "Attendance %", value: fmtPct(stats.attendancePct) },
-      { label: "Avg Work Hrs", value: fmtNum(stats.avgWorkMin / 60, 1) },
-      { label: "Total OT Hrs", value: fmtNum(stats.otHours, 1) },
-      { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
-    ]);
+    showAverages(summary);
   }
 
   function renderMonthly(scoped) {
@@ -225,6 +234,19 @@ export async function render(root) {
       exportName: `attendance_weekly_${view.date}`,
       attSub: `${fmtDate(dates[0])} → ${fmtDate(view.date)}`,
       empty: "No attendance uploaded for this week",
+    });
+  }
+
+  /** Free From→To date range (the "this date to this date" view). */
+  function renderRange(scoped) {
+    const from = view.from <= view.to ? view.from : view.to;
+    const to = view.from <= view.to ? view.to : view.from;
+    const dates = dateRange(from, to);
+    renderSummary(scoped, dates, {
+      title: `Attendance — ${fmtDate(from)} → ${fmtDate(to)}`,
+      exportName: `attendance_range_${from}_${to}`,
+      attSub: `${fmtDate(from)} → ${fmtDate(to)} · ${dates.length} day(s)`,
+      empty: "No attendance uploaded for this date range",
     });
   }
 
@@ -258,11 +280,23 @@ export async function render(root) {
       ot: totOt,
     });
 
+    const summary = [
+      { label: "Employees", value: rows.length },
+      { label: "Present", value: totPresent },
+      { label: "Absent", value: rows.reduce((s, r) => s + r.absent, 0) },
+      { label: "Leave", value: rows.reduce((s, r) => s + r.leave, 0) },
+      { label: "Avg Attendance %", value: fmtPct(avgAtt) },
+      { label: "Avg Work Hrs", value: fmtNum(avgWork, 1) },
+      { label: "Total OT Hrs", value: fmtNum(totOt, 1) },
+      { label: "Avg OT/Employee", value: fmtNum(rows.length ? totOt / rows.length : 0, 1) },
+    ];
+
     tableHost.replaceChildren(dataTable({
       title: opts.title,
       exportName: opts.exportName,
       pageSize: 20,
       onRowClick: (r) => openHistory(r.empId, r.name),
+      summary,
       columns: [
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
@@ -282,13 +316,7 @@ export async function render(root) {
       empty: opts.empty,
     }));
 
-    showAverages([
-      { label: "Employees", value: rows.length },
-      { label: "Avg Attendance %", value: fmtPct(avgAtt) },
-      { label: "Avg Work Hrs", value: fmtNum(avgWork, 1) },
-      { label: "Total OT Hrs", value: fmtNum(totOt, 1) },
-      { label: "Avg OT/Employee", value: fmtNum(rows.length ? totOt / rows.length : 0, 1) },
-    ]);
+    showAverages(summary);
   }
 
   /* ---------- employee history modal ---------- */

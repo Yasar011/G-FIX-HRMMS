@@ -295,6 +295,24 @@ export async function importAttendance(parsed, { employees = [], settings = {} }
   }
   await dbUpdate("attendance", updates);
 
+  // Sync a leave record for every "Leave" (L) day so the Leaves page (KPIs,
+  // charts, approvals list) reflects leave days that arrived via the
+  // attendance sheet — not just ones applied through the app or portal.
+  // Keyed by date (not push()) so re-uploading the same file is idempotent;
+  // already-approved since it's a historical fact, not a pending request.
+  const byId = new Map(employees.map((e) => [e.id, e]));
+  const leaveUpdates = {};
+  for (const { empId, date } of parsed.records) {
+    if (updates[`${date}/${empId}`]?.status !== "L") continue;
+    const emp = byId.get(empId);
+    leaveUpdates[`${empId}/${date}`] = {
+      empId, name: emp?.name || "", department: emp?.department || "",
+      type: "Uploaded", from: date, to: date, days: 1, halfDay: false,
+      status: "approved", source: "attendance", appliedAt: Date.now(), approvedBy: "Attendance Upload",
+    };
+  }
+  if (Object.keys(leaveUpdates).length) await dbUpdate("leaves", leaveUpdates);
+
   // Merge (never overwrite unrelated fields) any employee master data found in the sheet.
   const syncCount = Object.keys(parsed.employeesSync || {}).length;
   if (syncCount) {

@@ -104,11 +104,18 @@ export async function render(root) {
       breakdownCard("By Category", "🏷️", "category", s),
       breakdownCard("By Grade (Direct/Indirect)", "🧑‍🏭", "grade", s));
 
+    const empRows = employeeRows(s);
     tableHost.replaceChildren(dataTable({
       title: `Employee OT — ${fmtDate(s.from)} → ${fmtDate(s.to)}`,
       exportName: `overtime_${s.from}_${s.to}`,
       pageSize: 15,
       onRowClick: (r) => { location.hash = `#/employees/${encodeURIComponent(r.empId)}`; },
+      summary: [
+        { label: "Workers with OT", value: empRows.length },
+        { label: "Total OT Hours", value: Number(totalHrs.toFixed(1)) },
+        { label: `Total Cost (${s.currency})`, value: fmtNum(totalCost) },
+        { label: "Avg OT/Worker", value: empRows.length ? Number((totalHrs / empRows.length).toFixed(1)) : 0 },
+      ],
       columns: [
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
@@ -120,7 +127,7 @@ export async function render(root) {
         { key: "otDays", label: "OT Days", align: "right" },
         { key: "cost", label: `Cost (${s.currency})`, align: "right", render: (r) => fmtNum(r.cost), exportVal: (r) => r.cost },
       ],
-      rows: employeeRows(s),
+      rows: empRows,
       empty: "No overtime in this date range",
     }));
   }

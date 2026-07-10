@@ -134,6 +134,14 @@ export async function render(root) {
       exportName: `budget_${month}`,
       pageSize: 25,
       onRowClick: editable ? (r) => editDept(r.department) : null,
+      summary: [
+        { label: "Departments", value: rows.length },
+        { label: "Total Budget", value: s.budget },
+        { label: "Total Actual", value: s.actual },
+        { label: "Vacancies", value: s.vacancies },
+        { label: "Excess", value: s.excess },
+        { label: "Budget Filled %", value: `${s.filledPct.toFixed(1)}%` },
+      ],
       columns: [
         { key: "department", label: "Department" },
         { key: "budget", label: "Budget", align: "right" },

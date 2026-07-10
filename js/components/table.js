@@ -15,11 +15,12 @@ import { exportXLSX, exportCSV, exportPDF } from "../lib/export.js";
  * @param {Function} [o.onRowClick]
  * @param {Node|Node[]} [o.toolbar]           extra toolbar controls
  * @param {string} [o.empty]                  empty-state message
+ * @param {Array<{label,value}>} [o.summary]  totals strip baked into PDF/Excel/CSV exports
  * @returns HTMLElement with `_setRows(rows)` for realtime updates
  */
 export function dataTable({
   title = "", columns, rows = [], pageSize = 15, exportName = "",
-  onRowClick = null, toolbar = null, empty = "No records found",
+  onRowClick = null, toolbar = null, empty = "No records found", summary = null,
 }) {
   let all = [...rows];
   let filtered = all;
@@ -41,9 +42,9 @@ export function dataTable({
 
   /* ---- export buttons ---- */
   const exportBtns = exportName ? [
-    el("button", { class: "btn btn-sm btn-ghost", title: "Export Excel", onclick: () => exportXLSX(exportRows(), exportName, columns) }, "⬇ Excel"),
-    el("button", { class: "btn btn-sm btn-ghost", title: "Export CSV", onclick: () => exportCSV(exportRows(), exportName, columns) }, "⬇ CSV"),
-    el("button", { class: "btn btn-sm btn-ghost", title: "Export PDF", onclick: () => exportPDF(exportRows(), exportName, columns, { title }) }, "⬇ PDF"),
+    el("button", { class: "btn btn-sm btn-ghost", title: "Export Excel", onclick: () => exportXLSX(exportRows(), exportName, columns, { summary }) }, "⬇ Excel"),
+    el("button", { class: "btn btn-sm btn-ghost", title: "Export CSV", onclick: () => exportCSV(exportRows(), exportName, columns, { summary }) }, "⬇ CSV"),
+    el("button", { class: "btn btn-sm btn-ghost", title: "Export PDF", onclick: () => exportPDF(exportRows(), exportName, columns, { title, summary }) }, "⬇ PDF"),
   ] : [];
 
   const card = el("div", { class: "card table-card" },
@@ -133,5 +134,7 @@ export function dataTable({
 
   /** Replace rows (realtime updates keep current search/sort/page). */
   card._setRows = (newRows) => { all = [...newRows]; applyFilter(); };
+  /** Update the summary baked into future PDF/Excel/CSV exports. */
+  card._setSummary = (newSummary) => { summary = newSummary; };
   return card;
 }

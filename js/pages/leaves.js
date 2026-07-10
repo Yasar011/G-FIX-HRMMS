@@ -83,14 +83,23 @@ export async function render(root) {
       title: "Leave Requests",
       exportName: "leaves",
       pageSize: 15,
+      summary: [
+        { label: "Total Requests", value: leaves.length },
+        { label: "Pending", value: leaves.filter((l) => l.status === "pending").length },
+        { label: "Approved", value: approved.length },
+        { label: "Rejected", value: leaves.filter((l) => l.status === "rejected").length },
+        { label: "Total Days (Approved)", value: approved.reduce((s, l) => s + (Number(l.days) || 0), 0) },
+        { label: "On Leave Today", value: approved.filter((l) => l.from <= today() && l.to >= today()).length },
+      ],
       columns: [
         { key: "empId", label: "ID" },
         { key: "name", label: "Name" },
         { key: "department", label: "Department" },
         {
           key: "source", label: "From",
-          render: (r) => r.source === "employee" ? badge("🙋 Employee", "dim") : badge("👤 HR", "info"),
-          exportVal: (r) => r.source === "employee" ? "Employee" : "HR",
+          render: (r) => r.source === "employee" ? badge("🙋 Employee", "dim")
+            : r.source === "attendance" ? badge("📥 Attendance", "dim") : badge("👤 HR", "info"),
+          exportVal: (r) => r.source === "employee" ? "Employee" : r.source === "attendance" ? "Attendance" : "HR",
         },
         {
           key: "type", label: "Type",
