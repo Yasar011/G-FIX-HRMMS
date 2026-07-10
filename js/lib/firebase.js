@@ -16,6 +16,7 @@ import {
   updateProfile,
   updatePassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
 } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
 import {
   getDatabase,
@@ -66,7 +67,7 @@ export function track(eventName, params = {}) {
 // Re-export SDK helpers
 export {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously,
-  signOut, updateProfile, updatePassword, sendPasswordResetEmail,
+  signOut, updateProfile, updatePassword, sendPasswordResetEmail, sendEmailVerification,
   ref, get, set, update, push, remove, onValue, off,
   query, orderByChild, limitToLast, serverTimestamp,
   sRef, uploadBytes, getDownloadURL, deleteObject,

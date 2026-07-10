@@ -18,7 +18,6 @@ backed entirely by **Firebase** (Auth, Realtime Database, Storage, Analytics).
 | **Attrition** | Exit register, notice periods, reasons, monthly/yearly attrition %, tenure, replacement tracking |
 | **Recruitment** | Candidate pipeline, stages, hiring source, recruiter performance, time-to-hire |
 | **Leaves** | Apply/approve/reject with role gating; approved leaves auto-mark attendance |
-| **Overtime** | Daily/weekly/monthly OT hours & cost, department/employee breakdowns |
 | **Performance** | Discipline scoring, frequent-absentee analytics (>3/5/10 days, streaks, top-20, heatmap) |
 | **Reports** | 28 reports, each downloadable as **PDF / Excel / CSV**, with date/month/year parameters |
 | **Email automation** | EmailJS: send any report now or on schedule (daily/weekly/monthly/alerts) with PDF+Excel attachments and delivery log |
@@ -42,8 +41,9 @@ backed entirely by **Firebase** (Auth, Realtime Database, Storage, Analytics).
    [`js/config/firebase-config.js`](./js/config/firebase-config.js).
 
 > 🔑 **The first account registered becomes HR Admin automatically.**
-> Everyone who registers afterwards starts as read-only *Management* until an
-> admin promotes them in **Settings → Users & roles**.
+> Everyone who registers afterwards must verify their email, then waits with
+> **no access at all** until an HR Admin reviews them in **Settings → Pending
+> Approvals** and assigns a role and department.
 
 ### Try it with demo data
 

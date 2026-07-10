@@ -34,6 +34,20 @@
         <span class="chip" style="margin-top:8px;">G-FIX</span>
       </div>
       <form id="login-form" autocomplete="on">
+        <div id="register-fields" class="hidden">
+          <label class="field">
+            <span>Full name</span>
+            <input type="text" id="reg-name" placeholder="Your full name" autocomplete="name" />
+          </label>
+          <label class="field">
+            <span>Department</span>
+            <input type="text" id="reg-department" placeholder="e.g. Sewing, Cutting, HR" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Employee ID</span>
+            <input type="text" id="reg-empid" placeholder="Your employee ID" autocomplete="off" />
+          </label>
+        </div>
         <label class="field">
           <span>Email</span>
           <input type="email" id="login-email" placeholder="you@brandix.com" required autocomplete="username" />
@@ -41,6 +55,10 @@
         <label class="field">
           <span>Password</span>
           <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+        </label>
+        <label class="field hidden" id="confirm-password-field">
+          <span>Confirm password</span>
+          <input type="password" id="login-confirm-password" placeholder="••••••••" autocomplete="new-password" />
         </label>
         <div id="login-error" class="login-error hidden"></div>
         <button type="submit" class="btn btn-primary btn-block" id="login-submit">Sign in</button>
@@ -50,6 +68,39 @@
         <span class="chip">HR Admin</span><span class="chip">HR Executive</span>
         <span class="chip">Dept. Manager</span><span class="chip">Management</span>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ VERIFY EMAIL SCREEN ============ -->
+  <div id="verify-email-screen" class="login-screen hidden">
+    <div class="login-bg-orbs"><span></span><span></span><span></span></div>
+    <div class="login-card glass">
+      <div class="login-brand">
+        <div class="login-logo">✉️</div>
+        <h1>Check your email</h1>
+        <p>We sent a verification link to <strong id="verify-email-address"></strong>.
+          Check your inbox (and spam folder), click the link, then come back here.</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
+        <button type="button" class="btn btn-primary btn-block" id="verify-continue-btn">I've verified — Continue</button>
+        <button type="button" class="btn btn-ghost btn-block" id="verify-resend-btn">Resend verification email</button>
+        <button type="button" class="btn btn-ghost btn-block" id="verify-logout-btn">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PENDING APPROVAL SCREEN ============ -->
+  <div id="pending-approval-screen" class="login-screen hidden">
+    <div class="login-bg-orbs"><span></span><span></span><span></span></div>
+    <div class="login-card glass">
+      <div class="login-brand">
+        <div class="login-logo">⏳</div>
+        <h1>System approval is pending</h1>
+        <p>Your email is verified. Please wait for the HR department to review
+          your account and grant access — you'll be able to sign in as soon
+          as they approve it.</p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-block" id="pending-logout-btn" style="margin-top:16px;">Sign out</button>
     </div>
   </div>
 

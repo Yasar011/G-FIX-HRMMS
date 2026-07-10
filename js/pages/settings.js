@@ -97,6 +97,7 @@ export async function render(root) {
       "Leave requests show up under Leaves, HR visit requests show up under HR Visit Requests, both in the sidebar."));
 
   /* ---------- users & roles ---------- */
+  const pendingHost = el("div");
   const usersHost = el("div");
 
   /* ---------- sample data ---------- */
@@ -131,6 +132,7 @@ export async function render(root) {
     el("div", { class: "page-head" }, el("h3", {}, "Settings")),
     el("div", { class: "grid grid-2" }, paramsCard, emailCard),
     hrReqCard,
+    pendingHost,
     usersHost,
     can("seed_data") ? seedCard : null,
     aboutCard);
@@ -143,7 +145,18 @@ export async function render(root) {
   });
 
   pageWatch("users", (v) => {
-    const users = toList(v, "uid");
+    const all = toList(v, "uid");
+    const pending = all.filter((u) => canonicalRole(u.role) === "pending");
+    const approved = all.filter((u) => canonicalRole(u.role) !== "pending");
+
+    pendingHost.replaceChildren(pending.length ? el("div", { class: "card" },
+      el("div", { class: "card-head" },
+        el("h4", {}, "⏳ Pending Approvals"), el("div", { class: "spacer" }),
+        badge(String(pending.length), "warn")),
+      el("p", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
+        "New sign-ups wait here (email already verified) until an HR Admin picks a role and department for them."),
+      ...pending.map((u) => pendingRow(u))) : null);
+
     usersHost.replaceChildren(dataTable({
       title: "👥 Users & roles",
       exportName: "users",
@@ -161,10 +174,31 @@ export async function render(root) {
             el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); resetPassword(r); } }, "Reset password")),
         },
       ],
-      rows: users,
+      rows: approved,
       empty: "No users yet",
     }));
   });
+
+  /** One pending-approval row: pick a role + department, then grant access. */
+  function pendingRow(u) {
+    const roleSel = el("select", {}, ...Object.entries(ROLES).map(([v, l]) => el("option", { value: v }, l)));
+    const deptInput = el("input", { type: "text", value: u.department || "", placeholder: "Department", style: { minWidth: "140px" } });
+    return el("div", { class: "stat-row", style: { alignItems: "center", flexWrap: "wrap", gap: "10px" } },
+      el("div", {},
+        el("strong", {}, u.name || u.email),
+        el("br"),
+        el("small", { class: "muted" }, `${u.email} · Emp ID: ${u.empId || "—"} · Requested dept: ${u.department || "—"} · ${timeAgo(u.createdAt)}`)),
+      el("div", { style: { display: "flex", gap: "8px", alignItems: "center" } },
+        roleSel, deptInput,
+        el("button", {
+          class: "btn btn-sm btn-primary",
+          onclick: async (e) => {
+            e.stopPropagation();
+            await dbUpdate(`users/${u.uid}`, { role: roleSel.value, department: deptInput.value.trim() });
+            toast(`${u.name || u.email} approved as ${roleLabel(roleSel.value)}`, "ok");
+          },
+        }, "✅ Approve")));
+  }
 
   /** Send a Firebase password-reset email — the secure way to unlock/reset a user's login. */
   async function resetPassword(user) {

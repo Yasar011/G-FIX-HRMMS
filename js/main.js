@@ -2,7 +2,10 @@
  * App entry point: theme, auth flow, shell wiring (sidebar, search, shortcuts).
  */
 import { isConfigPlaceholder } from "./lib/firebase.js";
-import { initAuth, login, register, logout, currentUser, roleLabel } from "./lib/auth.js";
+import {
+  initAuth, login, register, logout, currentUser, roleLabel, canonicalRole,
+  recheckVerification, resendVerification,
+} from "./lib/auth.js";
 import { initTheme, toast, modal } from "./lib/ui.js";
 import { initRouter, route, buildSidebar } from "./router.js";
 import { initNotifications } from "./lib/notify.js";
@@ -26,13 +29,17 @@ if (isConfigPlaceholder) {
 
 let shellReady = false;
 
+const GATE_SCREENS = ["login-screen", "verify-email-screen", "pending-approval-screen", "app"];
+function showGateScreen(id) {
+  for (const s of GATE_SCREENS) $(s).classList.toggle("hidden", s !== id);
+}
+
 /** React to sign-in/out and live profile (role) changes. */
 function onAuthChanged(user, errorMessage) {
   $("loading-screen").classList.add("hidden");
   if (!user) {
     shellReady = false;
-    $("app").classList.add("hidden");
-    $("login-screen").classList.remove("hidden");
+    showGateScreen("login-screen");
     if (errorMessage) {
       const errBox = $("login-error");
       errBox.textContent = errorMessage;
@@ -40,8 +47,23 @@ function onAuthChanged(user, errorMessage) {
     }
     return;
   }
-  $("login-screen").classList.add("hidden");
-  $("app").classList.remove("hidden");
+
+  // Gate 1: must verify their email before anything else.
+  if (!user.emailVerified) {
+    shellReady = false;
+    showGateScreen("verify-email-screen");
+    $("verify-email-address").textContent = user.email || "";
+    return;
+  }
+
+  // Gate 2: verified, but HR hasn't assigned a real role yet.
+  if (canonicalRole(user.role) === "pending") {
+    shellReady = false;
+    showGateScreen("pending-approval-screen");
+    return;
+  }
+
+  showGateScreen("app");
 
   // Topbar identity
   $("user-name").textContent = user.name || user.email;
@@ -68,12 +90,20 @@ function onAuthChanged(user, errorMessage) {
 function wireLogin() {
   const form = $("login-form");
   const errBox = $("login-error");
+  const regFields = $("register-fields");
+  const confirmField = $("confirm-password-field");
+  const regInputs = [$("reg-name"), $("reg-department"), $("reg-empid")];
+  const confirmInput = $("login-confirm-password");
   let mode = "login";
 
   $("register-toggle").addEventListener("click", () => {
     mode = mode === "login" ? "register" : "login";
     $("login-submit").textContent = mode === "login" ? "Sign in" : "Create account";
     $("register-toggle").textContent = mode === "login" ? "Create an account" : "Back to sign in";
+    regFields.classList.toggle("hidden", mode !== "register");
+    confirmField.classList.toggle("hidden", mode !== "register");
+    regInputs.forEach((i) => { i.required = mode === "register"; });
+    confirmInput.required = mode === "register";
     errBox.classList.add("hidden");
   });
 
@@ -86,8 +116,16 @@ function wireLogin() {
     try {
       const email = $("login-email").value.trim();
       const pass = $("login-password").value;
-      if (mode === "login") await login(email, pass);
-      else { await register(email, pass); toast("Account created — welcome!", "ok"); }
+      if (mode === "login") {
+        await login(email, pass);
+      } else {
+        if (pass !== confirmInput.value) throw new Error("Passwords do not match.");
+        const name = $("reg-name").value.trim();
+        const department = $("reg-department").value.trim();
+        const empId = $("reg-empid").value.trim();
+        await register(email, pass, { name, department, empId });
+        toast("Account created — check your email for the verification link", "ok");
+      }
     } catch (err) {
       errBox.textContent = err.message;
       errBox.classList.remove("hidden");
@@ -96,6 +134,23 @@ function wireLogin() {
       btn.textContent = mode === "login" ? "Sign in" : "Create account";
     }
   });
+
+  $("verify-continue-btn").addEventListener("click", async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    const verified = await recheckVerification();
+    btn.disabled = false;
+    btn.textContent = "I've verified — Continue";
+    if (verified) { if (currentUser) currentUser.emailVerified = true; onAuthChanged(currentUser); }
+    else toast("Not verified yet — click the link in your email first.", "warn");
+  });
+  $("verify-resend-btn").addEventListener("click", async () => {
+    try { await resendVerification(); toast("Verification email sent again", "ok"); }
+    catch (err) { toast(err.message || "Could not resend email", "err"); }
+  });
+  $("verify-logout-btn").addEventListener("click", async () => { await logout(); });
+  $("pending-logout-btn").addEventListener("click", async () => { await logout(); });
 }
 
 /* ---------------- Shell chrome ---------------- */

@@ -6,14 +6,18 @@
  *   hr_executive  — day-to-day HR ops: attendance, employees, leaves, reports
  *   dept_manager  — sees own department, approves its leaves
  *   management    — read-only analytics + reports across the plant
+ *   pending       — just registered, no capabilities yet (see below)
  *
  * The FIRST account ever registered automatically becomes hr_admin; everyone
- * after that starts as `management` (read-only) until an admin promotes them
- * from Settings → User Management.
+ * after that starts as `pending` — no dashboard access at all — until an
+ * HR Admin reviews the request in Settings → Users & Roles and assigns a
+ * real role. New accounts must also verify their email before the app will
+ * even show them the "pending approval" screen.
  */
 import {
   auth, onAuthStateChanged, signInWithEmailAndPassword,
-  createUserWithEmailAndPassword, signOut, track,
+  createUserWithEmailAndPassword, signOut, updateProfile,
+  sendEmailVerification, track,
 } from "./firebase.js";
 import { read, dbSet, dbUpdate, watch } from "./store.js";
 
@@ -61,10 +65,15 @@ export function canonicalRole(role) { return LEGACY_ROLES[role] || role; }
 /** Human label for any role (canonical or legacy). */
 export function roleLabel(role) { return ROLES[canonicalRole(role)] || role || "—"; }
 
-/** Current signed-in user: { uid, email, name, role, department, photo }. */
+/** Current signed-in user: { uid, email, name, role, department, empId, emailVerified, photo }. */
 export let currentUser = null;
 
 let profileUnsub = null;
+
+// Extra registration-form fields (name/department/empId), stashed by register()
+// and consumed by initAuth's profile-creation fallback below — this keeps
+// profile creation to a single code path with no race between the two.
+let pendingRegistration = null;
 
 /**
  * Start listening to Firebase auth state.
@@ -91,11 +100,14 @@ export function initAuth(onUser) {
       if (!profile) {
         const allUsers = await read("users");
         const isFirst = !allUsers || Object.keys(allUsers).length === 0;
+        const extra = pendingRegistration || {};
+        pendingRegistration = null;
         profile = {
           email: fbUser.email,
-          name: fbUser.displayName || fbUser.email.split("@")[0],
-          role: isFirst ? "hr_admin" : "management",
-          department: "",
+          name: extra.name || fbUser.displayName || fbUser.email.split("@")[0],
+          role: isFirst ? "hr_admin" : "pending",
+          department: extra.department || "",
+          empId: extra.empId || "",
           createdAt: Date.now(),
         };
         await dbSet(path, profile);
@@ -104,7 +116,7 @@ export function initAuth(onUser) {
       // Keep currentUser live — role changes apply without re-login.
       profileUnsub = watch(path, (p) => {
         if (!p) return;
-        currentUser = { uid: fbUser.uid, ...p };
+        currentUser = { uid: fbUser.uid, emailVerified: fbUser.emailVerified, ...p };
         onUser(currentUser);
       });
       track("login", { role: profile.role });
@@ -128,11 +140,33 @@ export async function login(email, password) {
   } catch (e) { throw new Error(friendlyAuthError(e)); }
 }
 
-/** Register a new account (role assigned by initAuth on first login). */
-export async function register(email, password) {
+/**
+ * Register a new account and send a verification email. The profile record
+ * (role/department/empId) is created by initAuth's fallback, which picks up
+ * `name`/`department`/`empId` queued here — see `pendingRegistration` above.
+ */
+export async function register(email, password, { name = "", department = "", empId = "" } = {}) {
   try {
-    await createUserWithEmailAndPassword(auth, email, password);
-  } catch (e) { throw new Error(friendlyAuthError(e)); }
+    pendingRegistration = { name, department, empId };
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    if (name) await updateProfile(cred.user, { displayName: name }).catch(() => {});
+    await sendEmailVerification(cred.user);
+  } catch (e) {
+    pendingRegistration = null;
+    throw new Error(friendlyAuthError(e));
+  }
+}
+
+/** Re-check whether the signed-in user has clicked their email verification link yet. */
+export async function recheckVerification() {
+  if (!auth.currentUser) return false;
+  await auth.currentUser.reload();
+  return auth.currentUser.emailVerified;
+}
+
+/** Resend the verification email to the signed-in (not-yet-verified) user. */
+export async function resendVerification() {
+  if (auth.currentUser) await sendEmailVerification(auth.currentUser);
 }
 
 /** Sign the current user out. */
