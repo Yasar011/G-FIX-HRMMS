@@ -171,6 +171,21 @@ function looksLikeHrisWorkbook(wb) {
 function normHeader(h) { return String(h).toLowerCase().replace(/[^a-z]/g, ""); }
 
 /**
+ * The HRIS export's own "Status" column carries free-text employment-status
+ * phrases (e.g. "In Active", "Given onroll employee status") rather than a
+ * clean value — classify into the app's status enum (active/inactive/notice).
+ * Returns null when the text doesn't clearly map to either.
+ */
+function normalizeEmploymentStatus(raw) {
+  const s = String(raw || "").toLowerCase().replace(/\s+/g, "");
+  if (!s) return null;
+  if (/inactive|resign|terminat|abscond|separat|exit/.test(s)) return "inactive";
+  if (/notice/.test(s)) return "notice";
+  if (/active|onroll|working|confirm/.test(s)) return "active";
+  return null;
+}
+
+/**
  * Column-name → index lookup. Fuzzy: case/space/punctuation-insensitive, and
  * accepts a list of alias names (real exports vary the exact wording).
  */
@@ -213,6 +228,7 @@ function parseHrisAttendanceSheets(sheets, year) {
       department: colIndex(header, "department", "dept", "department name", "dept name"),
       category: colIndex(header, "category", "employee category"),
       grade: colIndex(header, "grade"),
+      empStatus: colIndex(header, "status", "employee status", "employment status"),
       workHours: dateColIdx + 1, otHours: dateColIdx + 2,
     };
     if (idx.empId === -1) { out.errors.push(`Sheet "${sheetName}": no "EMP ID" column found — headers were: ${header.join(" | ")}`); continue; }
@@ -242,6 +258,10 @@ function parseHrisAttendanceSheets(sheets, year) {
         if (idx.buyer !== -1 && row[idx.buyer]) sync.buyer = String(row[idx.buyer]).trim();
         if (idx.designation !== -1 && row[idx.designation]) sync.designation = String(row[idx.designation]).trim();
         if (idx.grade !== -1 && row[idx.grade]) sync.grade = String(row[idx.grade]).trim();
+        if (idx.empStatus !== -1 && row[idx.empStatus]) {
+          const norm = normalizeEmploymentStatus(row[idx.empStatus]);
+          if (norm) sync.status = norm;
+        }
         if (category) { sync.category = category.trim(); sync.nationality = /expat/i.test(category) ? "Expat" : "Local"; }
         if (doj instanceof Date) sync.doj = ymd(doj);
         else if (typeof doj === "string" && /^\d{4}-\d{2}-\d{2}/.test(doj.trim())) sync.doj = doj.trim().slice(0, 10);
@@ -323,8 +343,9 @@ export async function importAttendance(parsed, { employees = [], settings = {} }
       // Employees discovered purely through attendance sync need a status or
       // they're invisible everywhere (Departments, headcount, budget actuals,
       // demographics) — activeEmps() only counts active/notice. Never touch
-      // an employee that already has one (e.g. resigned via Attrition).
-      if (!existingById.get(empId)?.status) empUpdates[`${empId}/status`] = "active";
+      // an employee that already has one (e.g. resigned via Attrition), and
+      // don't clobber a status the sheet's own Status column just gave us.
+      if (!existingById.get(empId)?.status && !fields.status) empUpdates[`${empId}/status`] = "active";
     }
     if (Object.keys(empUpdates).length) await dbUpdate("employees", empUpdates);
   }
