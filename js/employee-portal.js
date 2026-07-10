@@ -1,17 +1,12 @@
 /**
  * Public "Employee Portal" kiosk — no login required.
  *
- * Combines the two employee-facing flows into ONE link: look yourself up by
- * Employee ID, then either request leave or request to visit HR — both go
- * to HR for approval. Also shows your own leave history with a downloadable
- * PDF certificate for approved leaves, and a banner if HR has asked to see
- * you. Authenticates with Firebase Anonymous sign-in; the database rules
+ * Employees look themselves up by Employee ID, then request leave and see
+ * their own leave history with a downloadable PDF certificate for approved
+ * leaves. Authenticates with Firebase Anonymous sign-in; the database rules
  * scope anonymous sessions to only ever read/write their OWN employee ID's
  * data (see database.rules.json) — never anyone else's, and never the
  * admin lists.
- *
- * Toggle: settings/hrRequestEnabled controls the "Visit HR" option only
- * (set from the admin Settings page). Leave requests have no such toggle.
  *
  * Requires: Firebase Console → Authentication → Sign-in method →
  * enable "Anonymous".
@@ -21,14 +16,13 @@ import { toast } from "./lib/ui.js";
 import { initials, fmtDate, el, dateRange, today } from "./lib/utils.js";
 
 const $ = (id) => document.getElementById(id);
-const steps = ["loading", "id", "confirm", "menu", "leave-form", "hr-form", "success"];
+const steps = ["loading", "id", "confirm", "menu", "leave-form", "success"];
 function showStep(name) {
   for (const s of steps) $(`step-${s}`).classList.toggle("active", s === name);
 }
 
 const STATUS_LABEL = { pending: "⏳ Pending", approved: "✅ Approved", rejected: "🚫 Rejected" };
 let current = null; // { empId, name, department }
-let hrVisitEnabled = false;
 
 init();
 
@@ -45,11 +39,6 @@ async function init() {
       <p>Ask HR to check that Anonymous sign-in is enabled in the Firebase console.</p></div>`;
     return;
   }
-
-  try {
-    const snap = await get(ref(db, "settings/hrRequestEnabled"));
-    hrVisitEnabled = snap.val() === true;
-  } catch (e) { console.error(e); }
 
   showStep("id");
   wireForm();
@@ -80,15 +69,6 @@ function wireForm() {
   $("leave-back-btn").addEventListener("click", () => showStep("menu"));
   $("lv-submit-btn").addEventListener("click", submitLeave);
   wireLeaveFormSync();
-
-  $("go-hr-btn").addEventListener("click", () => {
-    if (!hrVisitEnabled) return;
-    $("hr-reason-input").value = "";
-    $("hr-error").textContent = "";
-    showStep("hr-form");
-  });
-  $("hr-back-btn").addEventListener("click", () => showStep("menu"));
-  $("hr-submit-btn").addEventListener("click", submitHrRequest);
 
   $("success-back-btn").addEventListener("click", () => enterMenu());
 }
@@ -126,69 +106,14 @@ async function lookupEmployee() {
   }
 }
 
-/** Land on the menu hub: identity card, HR notice, leave list, action buttons. */
+/** Land on the menu hub: identity card, leave list, action buttons. */
 async function enterMenu() {
   $("menu-avatar").textContent = initials(current.name);
   $("menu-name").textContent = current.name;
   $("menu-dept").textContent = current.department || "—";
 
-  $("go-hr-btn").disabled = !hrVisitEnabled;
-  $("hr-disabled-note").textContent = hrVisitEnabled ? "" : "Visiting HR isn't available right now — please visit the HR office directly if urgent.";
-
-  await Promise.all([showHrNotice(), loadLeaves()]);
+  await loadLeaves();
   showStep("menu");
-}
-
-/**
- * Show a banner if HR has an open (pending or seen) request asking this
- * employee to come in — read-only, scoped to just this employee's own ID
- * (the database rules let any signed-in session, including anonymous, read
- * exactly hrRequests/{ownEmpId}, never anyone else's).
- */
-async function showHrNotice() {
-  const notice = $("hr-notice");
-  notice.classList.add("hidden");
-  try {
-    const snap = await get(ref(db, `hrRequests/${current.empId}`));
-    const all = Object.values(snap.val() || {});
-    const open = all.filter((r) => r.direction === "hr" && (r.status === "pending" || r.status === "seen"))
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
-    if (open) {
-      $("hr-notice-reason").textContent = open.reason || "Please visit the HR office at your earliest convenience.";
-      notice.classList.remove("hidden");
-    }
-  } catch (e) { console.error(e); /* non-fatal — the rest of the portal still works */ }
-}
-
-async function submitHrRequest() {
-  const reason = $("hr-reason-input").value.trim();
-  const errEl = $("hr-error");
-  errEl.textContent = "";
-  if (reason.length < 3) { errEl.textContent = "Please add a short reason (at least a few words)."; return; }
-
-  const btn = $("hr-submit-btn");
-  btn.disabled = true;
-  btn.textContent = "Submitting…";
-  try {
-    await push(ref(db, `hrRequests/${current.empId}`), {
-      name: current.name, department: current.department || "",
-      reason, status: "pending", direction: "employee", createdAt: serverTimestamp(),
-    });
-    await push(ref(db, "notifications"), {
-      type: "hr_request", title: "HR visit requested",
-      body: `${current.name} (${current.empId}) — ${reason.slice(0, 100)}`,
-      ts: Date.now(), by: current.name,
-    }).catch(() => {}); // best-effort; request itself already succeeded
-    $("success-title").textContent = "Request submitted";
-    $("success-body").textContent = "HR has been notified and will get back to you shortly.";
-    showStep("success");
-  } catch (e) {
-    console.error(e);
-    toast("Could not submit your request — please try again or visit HR directly.", "err", 5000);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Submit request";
-  }
 }
 
 /* ---------------- Leave: history list + apply form ---------------- */

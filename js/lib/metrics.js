@@ -186,12 +186,47 @@ export function groupAttendance(attendance, employees, dates, dim) {
 /** OT hours + cost per date over a range. `otRate` = default cost/hour. */
 export function otTrend(attendance, dates, employees, otRate = 0) {
   const rateOf = Object.fromEntries(employees.map((e) => [e.id, Number(e.otRate) || otRate]));
+  const empIds = new Set(employees.map((e) => e.id));
   return dates.filter((d) => attendance?.[d]).map((d) => {
-    const recs = Object.entries(attendance[d]);
+    const recs = Object.entries(attendance[d]).filter(([id]) => empIds.has(id));
     const hours = sum(recs, ([, r]) => r.otHours);
     const cost = sum(recs, ([id, r]) => (Number(r.otHours) || 0) * (rateOf[id] ?? otRate));
     return { date: d, hours, cost };
   });
+}
+
+/**
+ * OT hours + cost + contributing-employee count grouped by any dimension over
+ * a date range. `dim` may be an employee attribute ("department", "category",
+ * "grade") or "shift" (which lives on the attendance record, not the employee).
+ * Returns [{ name, hours, cost, employees, days }] sorted by hours desc.
+ */
+export function otByDimension(attendance, dates, employees, dim, otRate = 0) {
+  const byId = new Map(employees.map((e) => [e.id, e]));
+  const rateOf = (id) => Number(byId.get(id)?.otRate) || otRate;
+  const groups = new Map(); // key -> {name, hours, cost, emps:Set, dayset:Set}
+  const bump = (key, id, hrs, date) => {
+    if (!(hrs > 0)) return;
+    let g = groups.get(key);
+    if (!g) { g = { name: key, hours: 0, cost: 0, emps: new Set(), dayset: new Set() }; groups.set(key, g); }
+    g.hours += hrs;
+    g.cost += hrs * rateOf(id);
+    g.emps.add(id);
+    g.dayset.add(date);
+  };
+  for (const d of dates) {
+    const day = attendance?.[d];
+    if (!day) continue;
+    for (const [id, r] of Object.entries(day)) {
+      if (!byId.has(id)) continue;
+      const hrs = Number(r.otHours) || 0;
+      const key = dim === "shift" ? (r.shift || "—") : (byId.get(id)[dim] || "—");
+      bump(key, id, hrs, d);
+    }
+  }
+  return [...groups.values()]
+    .map((g) => ({ name: g.name, hours: Number(g.hours.toFixed(1)), cost: Math.round(g.cost), employees: g.emps.size, days: g.dayset.size }))
+    .sort((a, b) => b.hours - a.hours);
 }
 
 /* =============== Headcount / joining / attrition trends =============== */

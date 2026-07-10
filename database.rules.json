@@ -88,16 +88,6 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
-    "hrRequests": {
-      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
-      "$empId": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
-        "$id": {
-          ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && newData.child('status').val() === 'pending' && newData.child('direction').val() === 'employee' && newData.hasChildren(['name','reason','status','direction','createdAt'])) || (auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)))"
-        }
-      }
-    },
-
     "notifications": {
       ".read": "auth != null",
       ".write": "auth != null"

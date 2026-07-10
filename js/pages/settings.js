@@ -75,18 +75,10 @@ export async function render(root) {
 
   /* ---------- Employee Portal kiosk ---------- */
   const kioskLink = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/employee-portal.html`;
-  const hrReqToggle = el("input", {
-    type: "checkbox",
-    onchange: async () => {
-      await dbUpdate("settings", { hrRequestEnabled: hrReqToggle.checked });
-      toast(hrReqToggle.checked ? "'Visit HR' option enabled" : "'Visit HR' option disabled", "ok");
-    },
-  });
   const hrReqCard = el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h4", {}, "🙋 Employee Portal")),
     el("p", { class: "muted", style: { fontSize: "13px", marginBottom: "10px" } },
-      "A public, no-login page where any employee can look themselves up by Employee ID to request leave, check their own leave status (with a downloadable approved-leave certificate), and request to visit HR. Only their name and department are ever exposed to it — never phone, email, salary, etc. The toggle below controls the \"Visit HR\" option only; leave requests are always available. Requires Anonymous sign-in enabled in Firebase Console → Authentication → Sign-in method."),
-    el("label", { class: "inline", style: { marginBottom: "14px" } }, hrReqToggle, "Enable the 'Visit HR' option"),
+      "A public, no-login page where any employee can look themselves up by Employee ID to request leave and check their own leave status (with a downloadable approved-leave certificate). Only their name and department are ever exposed to it — never phone, email, salary, etc. Requires Anonymous sign-in enabled in Firebase Console → Authentication → Sign-in method."),
     el("div", { style: { display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" } },
       el("input", { type: "text", value: kioskLink, readonly: "", style: { flex: 1, minWidth: "220px", fontSize: "12.5px" } }),
       el("button", {
@@ -94,7 +86,7 @@ export async function render(root) {
         onclick: () => { navigator.clipboard?.writeText(kioskLink); toast("Link copied", "ok"); },
       }, "📋 Copy link")),
     el("p", { class: "muted", style: { fontSize: "12px", marginTop: "8px" } },
-      "Leave requests show up under Leaves, HR visit requests show up under HR Visit Requests, both in the sidebar."));
+      "Leave requests show up under Leaves in the sidebar."));
 
   /* ---------- users & roles ---------- */
   const pendingHost = el("div");
@@ -141,7 +133,6 @@ export async function render(root) {
     settings = s || {};
     for (const d of paramDefs) if (document.activeElement !== paramInputs[d.id]) paramInputs[d.id].value = settings[d.id] ?? "";
     for (const d of emailDefs) if (document.activeElement !== emailInputs[d.id]) emailInputs[d.id].value = settings.emailjs?.[d.id] ?? "";
-    if (document.activeElement !== hrReqToggle) hrReqToggle.checked = !!settings.hrRequestEnabled;
   });
 
   pageWatch("users", (v) => {
