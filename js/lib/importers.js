@@ -122,11 +122,40 @@ function mapDayStatus(raw) {
   return DAY_STATUS_MAP[v] || "L";
 }
 
-/** Excel time cell (Date at 1899-12-30 epoch, or a day-fraction number) → decimal hours. */
+/** Excel time cell (Date at 1899-12-30 epoch, a day-fraction number, or an "HH:MM:SS" string) → decimal hours. */
 function excelTimeToHours(v) {
   if (v instanceof Date) return v.getUTCHours() + v.getUTCMinutes() / 60;
   if (typeof v === "number") return v * 24;
+  const m = typeof v === "string" && v.trim().match(/^(\d{1,3}):(\d{2})(?::(\d{2}))?$/);
+  if (m) return Number(m[1]) + Number(m[2]) / 60 + (Number(m[3]) || 0) / 3600;
   return 0;
+}
+
+/**
+ * True when the raw file bytes are an HTML table export mislabeled with an
+ * .xls/.xlsx extension — common for HRIS "print to Excel" style reports.
+ */
+function looksLikeHtmlExport(headText) {
+  return /<table[\s>]/i.test(headText) || /<html[\s>]/i.test(headText);
+}
+
+/**
+ * Parse an HTML table export into {name, rows} sheets (rows = array-of-arrays,
+ * header first — the same shape `sheetRows(wb, name, {header:1})` produces).
+ *
+ * Uses the browser's own HTML5 parser rather than SheetJS's HTML reader.
+ * Some export tools emit malformed markup with unclosed <td> tags
+ * (`<td>A<td>B<td>C</td>`); a real HTML5 parser auto-closes each cell at the
+ * next <td>/<tr> per spec (exactly like a browser renders the table), while
+ * SheetJS's lenient HTML reader instead concatenates the unclosed cells'
+ * text into one cell — silently shifting every column after it.
+ */
+function parseHtmlTables(text) {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  return [...doc.querySelectorAll("table")].map((table, i) => ({
+    name: `Sheet${i + 1}`,
+    rows: [...table.rows].map((tr) => [...tr.cells].map((td) => td.textContent.trim())),
+  }));
 }
 
 /** True when a workbook looks like the real HRIS export (dated sheet headers). */
@@ -156,14 +185,15 @@ function colIndex(header, ...aliases) {
 }
 
 /**
- * Parse a multi-sheet HRIS export (one sheet per day) into normalized
- * records, plus an employee-master-data sync map built from every row.
+ * Parse one or more HRIS-format sheets (one sheet per day, each with its own
+ * dated status column) into normalized records, plus an employee-master-data
+ * sync map built from every row.
+ * @param {Array<{name:string, rows:Array<Array>}>} sheets  header row first
  */
-function parseHrisAttendanceWorkbook(wb, year) {
+function parseHrisAttendanceSheets(sheets, year) {
   const out = { format: "hris", records: [], dates: new Set(), empIds: new Set(), skipped: 0, errors: [], employeesSync: {} };
 
-  for (const sheetName of wb.SheetNames) {
-    const rows = sheetRows(wb, sheetName, { header: 1 });
+  for (const { name: sheetName, rows } of sheets) {
     if (!rows.length) continue;
     const header = rows[0];
     const dateColIdx = header.findIndex((h) => /^\s*\d{1,2}\/\d{1,2}/.test(String(h)));
@@ -214,11 +244,20 @@ function parseHrisAttendanceWorkbook(wb, year) {
         if (idx.grade !== -1 && row[idx.grade]) sync.grade = String(row[idx.grade]).trim();
         if (category) { sync.category = category.trim(); sync.nationality = /expat/i.test(category) ? "Expat" : "Local"; }
         if (doj instanceof Date) sync.doj = ymd(doj);
+        else if (typeof doj === "string" && /^\d{4}-\d{2}-\d{2}/.test(doj.trim())) sync.doj = doj.trim().slice(0, 10);
         out.employeesSync[empId] = sync;
       }
     }
   }
   return out;
+}
+
+/** Parse a multi-sheet HRIS workbook (one sheet per day) — real .xlsx/.xls binary path. */
+function parseHrisAttendanceWorkbook(wb, year) {
+  return parseHrisAttendanceSheets(
+    wb.SheetNames.map((name) => ({ name, rows: sheetRows(wb, name, { header: 1 }) })),
+    year,
+  );
 }
 
 /**
@@ -228,7 +267,14 @@ function parseHrisAttendanceWorkbook(wb, year) {
  *   (its sheet headers carry day/month only, e.g. "01/07").
  */
 export async function parseAttendanceWorkbook(file, { settings = {}, year } = {}) {
-  const wb = await readWorkbookRaw(file);
+  const buf = await file.arrayBuffer();
+  const head = new TextDecoder("utf-8", { fatal: false }).decode(buf.slice(0, 4096));
+  if (looksLikeHtmlExport(head)) {
+    const text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+    const sheets = parseHtmlTables(text);
+    return parseHrisAttendanceSheets(sheets, Number(year) || new Date().getFullYear());
+  }
+  const wb = XLSX.read(buf, { cellDates: true });
   if (looksLikeHrisWorkbook(wb)) {
     return parseHrisAttendanceWorkbook(wb, Number(year) || new Date().getFullYear());
   }
