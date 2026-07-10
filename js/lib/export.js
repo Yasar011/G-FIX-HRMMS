@@ -10,11 +10,18 @@ import { downloadBlob, today } from "./utils.js";
  * @param {string} name             file/sheet name (no extension)
  * @param {Array<{key,label}>} [columns]  optional column order/labels
  */
-export function exportXLSX(rows, name = "report", columns = null) {
+export function exportXLSX(rows, name = "report", columns = null, { summary = null } = {}) {
   const data = columns
     ? rows.map((r) => Object.fromEntries(columns.map((c) => [c.label, r[c.key] ?? ""])))
     : rows;
-  const ws = XLSX.utils.json_to_sheet(data);
+  let ws;
+  if (summary && summary.length) {
+    // A "Summary" band above the table so the download carries the headline totals.
+    ws = XLSX.utils.aoa_to_sheet([["Summary"], ...summary.map((s) => [s.label, s.value]), []]);
+    XLSX.utils.sheet_add_json(ws, data, { origin: -1 });
+  } else {
+    ws = XLSX.utils.json_to_sheet(data);
+  }
   autoWidth(ws, data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
@@ -22,16 +29,20 @@ export function exportXLSX(rows, name = "report", columns = null) {
 }
 
 /** Export rows to CSV (UTF-8 BOM so Excel opens it correctly). */
-export function exportCSV(rows, name = "report", columns = null) {
+export function exportCSV(rows, name = "report", columns = null, { summary = null } = {}) {
   const cols = columns || Object.keys(rows[0] || {}).map((k) => ({ key: k, label: k }));
   const escCell = (v) => {
     const s = String(v ?? "");
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = [
-    cols.map((c) => escCell(c.label)).join(","),
-    ...rows.map((r) => cols.map((c) => escCell(r[c.key])).join(",")),
-  ];
+  const lines = [];
+  if (summary && summary.length) {
+    lines.push("Summary");
+    for (const s of summary) lines.push(`${escCell(s.label)},${escCell(s.value)}`);
+    lines.push("");
+  }
+  lines.push(cols.map((c) => escCell(c.label)).join(","));
+  for (const r of rows) lines.push(cols.map((c) => escCell(r[c.key])).join(","));
   downloadBlob(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" }), `${name}_${today()}.csv`);
 }
 

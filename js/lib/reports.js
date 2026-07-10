@@ -13,7 +13,7 @@
  */
 import {
   ym, ymd, today, dateRange, addDays, fmtDate, parseYmd, yearsSince,
-  daysToAnniversary, toList, flattenNested, sum, uniq,
+  daysToAnniversary, toList, flattenNested, sum, uniq, fmtNum,
 } from "./utils.js";
 import {
   empList, activeEmps, dayStats, employeeAttendance, monthDates, groupAttendance,
@@ -52,6 +52,21 @@ const ATT_SUM_COLS = [
   { key: "otHrs", label: "OT Hrs" }, { key: "attPct", label: "Att %" },
 ];
 
+/** Totals strip for an attendance-summary-shaped row set. */
+function attSummary(rows) {
+  const avgAtt = rows.length ? sum(rows, (r) => r.attPct) / rows.length : 0;
+  return [
+    { label: "Employees", value: rows.length },
+    { label: "Present", value: sum(rows, (r) => r.present) },
+    { label: "Absent", value: sum(rows, (r) => r.absent) },
+    { label: "Leave", value: sum(rows, (r) => r.leave) },
+    { label: "Half Day", value: sum(rows, (r) => r.halfDay) },
+    { label: "Late", value: sum(rows, (r) => r.late) },
+    { label: "OT Hrs", value: Number(sum(rows, (r) => r.otHrs).toFixed(1)) },
+    { label: "Avg Att %", value: `${avgAtt.toFixed(1)}%` },
+  ];
+}
+
 /** Group-dimension attendance report (department/section/module/buyer). */
 function dimensionReport(dim) {
   return (data, p) => {
@@ -70,15 +85,24 @@ function dimensionReport(dim) {
   };
 }
 
-/** Employee-register style report from a filter. */
+/** Employee-register style report from a filter, with a headcount summary. */
 function registerReport(filter, extraCols = []) {
-  return (data) => ({
-    columns: [...EMP_COLS,
-      { key: "category", label: "Category" }, { key: "type", label: "Type" },
-      { key: "gender", label: "Gender" }, { key: "doj", label: "DOJ" },
-      { key: "status", label: "Status" }, ...extraCols],
-    rows: empList(data.employees).filter(filter),
-  });
+  return (data) => {
+    const rows = empList(data.employees).filter(filter);
+    const active = rows.filter((e) => e.status === "active" || e.status === "notice");
+    const catCounts = {};
+    for (const e of active) { const c = e.category || "—"; catCounts[c] = (catCounts[c] || 0) + 1; }
+    const topCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]).slice(0, 4)
+      .map(([c, n]) => ({ label: c, value: n }));
+    return {
+      columns: [...EMP_COLS,
+        { key: "category", label: "Category" }, { key: "grade", label: "Grade" }, { key: "type", label: "Type" },
+        { key: "gender", label: "Gender" }, { key: "doj", label: "DOJ" },
+        { key: "status", label: "Status" }, ...extraCols],
+      rows,
+      summary: [{ label: "Total", value: rows.length }, { label: "Active", value: active.length }, ...topCats],
+    };
+  };
 }
 
 /* ---------- the registry ---------- */
@@ -119,19 +143,24 @@ export const REPORTS = [
     build: (data, p) => {
       const end = p.date || today();
       const dates = dateRange(addDays(end, -6), end);
-      return { subtitle: `${fmtDate(dates[0])} → ${fmtDate(end)}`, columns: ATT_SUM_COLS, rows: attendanceSummaryRows(data, dates) };
+      const rows = attendanceSummaryRows(data, dates);
+      return { subtitle: `${fmtDate(dates[0])} → ${fmtDate(end)}`, columns: ATT_SUM_COLS, rows, summary: attSummary(rows) };
     },
   },
   {
     id: "monthly_attendance", title: "Monthly Attendance", icon: "🗓️", group: "Attendance", params: ["month"],
-    build: (data, p) => ({ subtitle: p.month, columns: ATT_SUM_COLS, rows: attendanceSummaryRows(data, monthDates(data.attendance, p.month || ym())) }),
+    build: (data, p) => {
+      const rows = attendanceSummaryRows(data, monthDates(data.attendance, p.month || ym()));
+      return { subtitle: p.month, columns: ATT_SUM_COLS, rows, summary: attSummary(rows) };
+    },
   },
   {
     id: "yearly_attendance", title: "Yearly Attendance", icon: "📆", group: "Attendance", params: ["year"],
     build: (data, p) => {
       const year = p.year || String(new Date().getFullYear());
       const dates = Object.keys(data.attendance || {}).filter((d) => d.startsWith(year)).sort();
-      return { subtitle: year, columns: ATT_SUM_COLS, rows: attendanceSummaryRows(data, dates) };
+      const rows = attendanceSummaryRows(data, dates);
+      return { subtitle: year, columns: ATT_SUM_COLS, rows, summary: attSummary(rows) };
     },
   },
   {
@@ -139,7 +168,7 @@ export const REPORTS = [
     build: (data, p) => {
       const dates = monthDates(data.attendance, p.month || ym());
       const rows = attendanceSummaryRows(data, dates).filter((r) => r.late > 0).sort((a, b) => b.late - a.late);
-      return { subtitle: p.month, columns: ATT_SUM_COLS, rows };
+      return { subtitle: p.month, columns: ATT_SUM_COLS, rows, summary: attSummary(rows) };
     },
   },
   {
@@ -147,7 +176,7 @@ export const REPORTS = [
     build: (data, p) => {
       const dates = monthDates(data.attendance, p.month || ym());
       const rows = attendanceSummaryRows(data, dates).filter((r) => r.absent > 0).sort((a, b) => b.absent - a.absent);
-      return { subtitle: p.month, columns: ATT_SUM_COLS, rows };
+      return { subtitle: p.month, columns: ATT_SUM_COLS, rows, summary: attSummary(rows) };
     },
   },
   {
@@ -179,7 +208,13 @@ export const REPORTS = [
           cost: Math.round(a.otHours * (Number(e.otRate) || otRate)) };
       }).filter((r) => r.otHrs > 0).sort((a, b) => b.otHrs - a.otHrs);
       return { subtitle: p.month, columns: [...EMP_COLS.slice(0, 4),
-        { key: "otHrs", label: "OT Hours" }, { key: "otDays", label: "OT Days" }, { key: "cost", label: "OT Cost" }], rows };
+        { key: "otHrs", label: "OT Hours" }, { key: "otDays", label: "OT Days" }, { key: "cost", label: "OT Cost" }], rows,
+        summary: [
+          { label: "Workers with OT", value: rows.length },
+          { label: "Total OT Hours", value: Number(sum(rows, (r) => r.otHrs).toFixed(1)) },
+          { label: "Total OT Cost", value: fmtNum(sum(rows, (r) => r.cost)) },
+          { label: "Avg OT/Worker", value: rows.length ? Number((sum(rows, (r) => r.otHrs) / rows.length).toFixed(1)) : 0 },
+        ] };
     },
   },
   {
@@ -191,7 +226,13 @@ export const REPORTS = [
           from: l.from, to: l.to, days: l.days, status: l.status, reason: l.reason || "" }));
       return { subtitle: month, columns: [{ key: "id", label: "ID" }, { key: "name", label: "Name" },
         { key: "department", label: "Department" }, { key: "type", label: "Type" }, { key: "from", label: "From" },
-        { key: "to", label: "To" }, { key: "days", label: "Days" }, { key: "status", label: "Status" }, { key: "reason", label: "Reason" }], rows };
+        { key: "to", label: "To" }, { key: "days", label: "Days" }, { key: "status", label: "Status" }, { key: "reason", label: "Reason" }], rows,
+        summary: [
+          { label: "Requests", value: rows.length },
+          { label: "Total Days", value: Number(sum(rows, (r) => Number(r.days) || 0).toFixed(1)) },
+          { label: "Approved", value: rows.filter((r) => r.status === "approved").length },
+          { label: "Pending", value: rows.filter((r) => r.status === "pending").length },
+        ] };
     },
   },
 

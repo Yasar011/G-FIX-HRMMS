@@ -69,8 +69,8 @@ export async function render(root) {
     track("report_export", { report: name, format });
 
     if (format === "pdf") exportPDF(rows, name, columns, { title: report.title, subtitle, summary });
-    else if (format === "xlsx") exportXLSX(rows, name, columns);
-    else if (format === "csv") exportCSV(rows, name, columns);
+    else if (format === "xlsx") exportXLSX(rows, name, columns, { summary });
+    else if (format === "csv") exportCSV(rows, name, columns, { summary });
     else {
       previewHost.replaceChildren(
         el("div", { class: "page-head", style: { marginTop: "6px" } },
