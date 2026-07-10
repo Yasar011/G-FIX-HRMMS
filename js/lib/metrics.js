@@ -135,6 +135,40 @@ export function monthDates(attendance, monthKey) {
   return Object.keys(attendance || {}).filter((d) => d.startsWith(monthKey)).sort();
 }
 
+/**
+ * Aggregate attendance stats across a set of dates for a set of employees —
+ * totals for a "period" view (dashboard date range). Same shape as dayStats()
+ * plus `activeDays` (dates in the range that actually had any records).
+ */
+export function periodStats(attendance, employees, dates) {
+  const ids = new Set(activeEmps(employees).map((e) => e.id));
+  const out = { present: 0, absent: 0, leave: 0, late: 0, earlyOut: 0, halfDay: 0, wfh: 0, holiday: 0, marked: 0, otHours: 0, workMinTotal: 0, workMinCount: 0, activeDays: 0 };
+  for (const d of dates) {
+    const day = attendance?.[d];
+    if (!day) continue;
+    let any = false;
+    for (const [id, r] of Object.entries(day)) {
+      if (!ids.has(id)) continue;
+      any = true;
+      out.otHours += Number(r.otHours) || 0;
+      if (r.workMin > 0) { out.workMinTotal += r.workMin; out.workMinCount++; }
+      if (r.status === "H") { out.holiday++; continue; }
+      out.marked++;
+      if (PRESENT_LIKE.has(r.status)) out.present++;
+      if (r.status === "A") out.absent++;
+      if (r.status === "L") out.leave++;
+      if (r.status === "HD") out.halfDay++;
+      if (r.status === "WFH") out.wfh++;
+      if (r.late) out.late++;
+      if (r.earlyOut) out.earlyOut++;
+    }
+    if (any) out.activeDays++;
+  }
+  out.attendancePct = out.marked ? (out.present / out.marked) * 100 : 0;
+  out.avgWorkMin = out.workMinCount ? out.workMinTotal / out.workMinCount : 0;
+  return out;
+}
+
 /** Daily attendance % series over the last `n` days (from stored data). */
 export function dailyTrend(attendance, employees, n = 30) {
   const to = today();

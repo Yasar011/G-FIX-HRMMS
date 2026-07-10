@@ -107,13 +107,14 @@ export function hexA(hex, a) {
  */
 export function chartCard({ title, type = "line", labels = [], datasets = [], options = {}, height = "" }) {
   const canvas = el("canvas");
+  const titleNode = el("h4", {}, title);
   const card = el("div", { class: "card chart-card" },
     el("div", { class: "card-head" },
-      el("h4", {}, title),
+      titleNode,
       el("div", { class: "spacer" }),
       el("button", {
         class: "icon-btn", title: "Download chart as PNG",
-        onclick: () => downloadChartPNG(canvas, title),
+        onclick: () => downloadChartPNG(canvas, titleNode.textContent),
       }, "📷")),
     el("div", { class: `chart-wrap ${height}` }, canvas));
 
@@ -124,6 +125,7 @@ export function chartCard({ title, type = "line", labels = [], datasets = [], op
   live.add(chart);
 
   card._chart = chart;
+  card._title = (newTitle) => { titleNode.textContent = newTitle; };
   card._update = (newLabels, newDatasets) => {
     chart.data.labels = newLabels;
     chart.data.datasets = styleDatasets(type, newDatasets);

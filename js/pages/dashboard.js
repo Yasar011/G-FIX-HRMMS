@@ -6,9 +6,10 @@
 import { pageWatchAll } from "../lib/store.js";
 import { kpiGrid } from "../components/kpi.js";
 import { chartCard } from "../lib/charts.js";
-import { el, fmtNum, fmtMoney, fmtMonth, ym, today, sum } from "../lib/utils.js";
+import { filterBar } from "../components/filters.js";
+import { el, fmtNum, fmtMoney, fmtMonth, ym, today, sum, dateRange, fmtDate } from "../lib/utils.js";
 import {
-  empList, activeEmps, workforceStats, dayStats, dailyTrend, monthlyTrend,
+  empList, activeEmps, workforceStats, periodStats, dailyTrend, monthlyTrend,
   groupAttendance, monthDates, otTrend, headcountTrend, budgetSummary,
   distribution, AGE_BANDS,
 } from "../lib/metrics.js";
@@ -20,11 +21,12 @@ const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", bra
 export async function render(root) {
   const month = ym();
   const scope = deptScope(); // dept managers see their department only
+  const view = { from: today(), to: today() };
 
   /* ---------- KPI sections ---------- */
   const todayKpis = kpiGrid([
-    { id: "present", label: "Today's Present", icon: "✅", color: C.ok },
-    { id: "absent", label: "Today's Absent", icon: "🚫", color: C.bad },
+    { id: "present", label: "Present", icon: "✅", color: C.ok },
+    { id: "absent", label: "Absent", icon: "🚫", color: C.bad },
     { id: "leave", label: "Leave", icon: "🌴", color: C.info },
     { id: "late", label: "Late", icon: "⏰", color: C.warn },
     { id: "earlyOut", label: "Early Out", icon: "🚪", color: C.warn },
@@ -78,13 +80,24 @@ export async function render(root) {
   const genderChart = chartCard({ title: "Gender Distribution", type: "doughnut", datasets: [] });
   const ageChart = chartCard({ title: "Age Distribution", type: "bar", datasets: [] });
 
+  const periodLabel = el("div", { class: "section-label" }, "Today");
+  const dateFilters = filterBar([
+    { id: "from", label: "From", type: "date", value: view.from },
+    { id: "to", label: "To", type: "date", value: view.to },
+  ], (v) => { Object.assign(view, v); recompute(); },
+    el("button", {
+      class: "btn btn-sm",
+      onclick: () => { view.from = today(); view.to = today(); dateFilters._set("from", view.from); dateFilters._set("to", view.to); recompute(); },
+    }, "Today"));
+
   root.append(
     el("div", { class: "page-head" },
       el("h3", {}, `Plant Overview — ${new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`),
       scope ? el("span", { class: "chip" }, `Scope: ${scope}`) : null,
       el("div", { class: "spacer" }),
       el("button", { class: "btn btn-sm", onclick: () => exportElementPNG(root, "dashboard") }, "📷 Snapshot")),
-    el("div", { class: "section-label" }, "Today"),
+    dateFilters,
+    periodLabel,
     todayKpis,
     el("div", { class: "section-label" }, "Workforce & Budget"),
     workforceKpis,
@@ -100,20 +113,35 @@ export async function render(root) {
   );
 
   /* ---------- Realtime recompute ---------- */
+  let cache = null;
   pageWatchAll(["employees", "attendance", `budget/${month}`, "attrition", "settings"], (data) => {
+    cache = data;
+    recompute();
+  });
+
+  function recompute() {
+    if (!cache) return;
+    const data = cache;
     let employees = empList(data.employees);
     if (scope) employees = employees.filter((e) => e.department === scope);
     const attendance = data.attendance || {};
     const settings = data.settings || {};
     const otRate = Number(settings.otRate) || 0;
+    const currency = settings.currency || "LKR";
 
-    /* Today */
-    const t = dayStats(attendance[today()] || {}, employees);
+    /* Selected period (date range, default today→today) */
+    const from = view.from <= view.to ? view.from : view.to;
+    const to = view.from <= view.to ? view.to : view.from;
+    const pDates = dateRange(from, to);
+    const isToday = from === today() && to === today();
+    periodLabel.textContent = isToday ? "Today" : `Selected Period — ${fmtDate(from)} → ${fmtDate(to)}`;
+
+    const t = periodStats(attendance, employees, pDates);
     todayKpis._update({
       present: t.present, absent: t.absent, leave: t.leave, late: t.late,
       earlyOut: t.earlyOut, halfDay: t.halfDay, wfh: t.wfh, holiday: t.holiday,
-      attPct: { value: t.attendancePct, sub: `${t.marked} marked / ${t.unmarked} unmarked` },
-      avgWork: { value: t.avgWorkMin / 60, sub: "hours (today)" },
+      attPct: { value: t.attendancePct, sub: `${t.marked} marked · ${t.activeDays} day(s)` },
+      avgWork: { value: t.avgWorkMin / 60, sub: isToday ? "hours (today)" : "avg hours/record" },
     });
 
     /* Workforce + budget */
@@ -133,15 +161,13 @@ export async function render(root) {
       birthdays: w.birthdays7d, anniversaries: w.anniversaries7d,
     });
 
-    /* OT */
-    const mDates = monthDates(attendance, month);
-    const ot = otTrend(attendance, mDates, employees, otRate);
-    const otTodayRow = ot.find((o) => o.date === today());
-    const monthOtHours = sum(ot, (o) => o.hours);
+    /* OT — over the selected range */
+    const ot = otTrend(attendance, pDates, employees, otRate);
+    const periodOtHours = sum(ot, (o) => o.hours);
     otKpis._update({
-      avgOt: { value: Number((mDates.length ? monthOtHours / Math.max(1, w.headcount) : 0).toFixed(1)), sub: "per employee" },
-      otToday: { value: fmtMoney(otTodayRow?.cost || 0, settings.currency || "LKR"), sub: `${fmtNum(otTodayRow?.hours || 0, 1)} hrs` },
-      otMonth: { value: fmtMoney(sum(ot, (o) => o.cost), settings.currency || "LKR"), sub: `${fmtNum(monthOtHours, 1)} hrs MTD` },
+      avgOt: { value: Number((w.headcount ? periodOtHours / w.headcount : 0).toFixed(1)), sub: "per employee (range)" },
+      otToday: { value: fmtMoney(sum(ot, (o) => o.cost), currency), sub: `${fmtNum(periodOtHours, 1)} hrs (range)` },
+      otMonth: { value: fmtMoney(sum(otTrend(attendance, monthDates(attendance, month), employees, otRate), (o) => o.cost), currency), sub: "this month" },
     });
 
     /* Charts */
@@ -157,16 +183,19 @@ export async function render(root) {
       { label: "Attendance %", data: monthly.map((m) => Number(m.attendancePct.toFixed(1))), color: C.brand },
     ]);
 
-    const byDept = groupAttendance(attendance, employees, mDates, "department");
+    // Department attendance % over the selected range (department-wise, date-aware).
+    deptChart._title(isToday ? "Department Attendance % (Today)" : "Department Attendance % (Selected Range)");
+    const byDept = groupAttendance(attendance, employees, pDates, "department");
     deptChart._update(byDept.map((d) => d.name), [
       { label: "Attendance %", data: byDept.map((d) => Number(d.attendancePct.toFixed(1))), perBarColor: true },
     ]);
 
+    pvaChart._title(isToday ? "Present vs Absent (Today)" : "Present vs Absent (Range)");
     pvaChart._update(["Present", "Absent", "Leave", "Half Day", "WFH"], [
       { data: [t.present, t.absent, t.leave, t.halfDay, t.wfh], backgroundColor: [C.ok, C.bad, C.info, C.violet, C.pink] },
     ]);
 
-    otChart._update(ot.map((o) => o.date.slice(8)), [
+    otChart._update(ot.map((o) => o.date.slice(5)), [
       { label: "OT Hours", data: ot.map((o) => Number(o.hours.toFixed(1))), color: C.warn, fill: true },
     ]);
 
@@ -179,5 +208,5 @@ export async function render(root) {
 
     const ages = distribution(activeEmps(employees), (e) => e.dob ? Math.floor((Date.now() - new Date(e.dob)) / (365.25 * 86400e3)) : null, AGE_BANDS);
     ageChart._update(ages.map((a) => a.label), [{ label: "Employees", data: ages.map((a) => a.count), color: C.violet }]);
-  });
+  }
 }
