@@ -3,7 +3,7 @@
  * management, sample-data seeder.
  */
 import { pageWatch, dbUpdate } from "../lib/store.js";
-import { can, ROLES, roleLabel, canonicalRole, currentUser } from "../lib/auth.js";
+import { can, ROLES, roleLabel, canonicalRole, currentUser, createGuestAccount } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { el, toList, timeAgo, uniq } from "../lib/utils.js";
@@ -112,6 +112,9 @@ export async function render(root) {
       },
     }, "Load sample data"));
 
+  /* ---------- create guest / staff login ---------- */
+  const guestCard = can("manage_users") ? buildGuestCard() : null;
+
   /* ---------- about ---------- */
   const aboutCard = el("div", { class: "card" },
     el("div", { class: "card-head" }, el("h4", {}, "ℹ️ About")),
@@ -126,6 +129,7 @@ export async function render(root) {
     hrReqCard,
     pendingHost,
     usersHost,
+    guestCard,
     can("seed_data") ? seedCard : null,
     aboutCard);
 
@@ -189,6 +193,63 @@ export async function render(root) {
             toast(`${u.name || u.email} approved as ${roleLabel(roleSel.value)}`, "ok");
           },
         }, "✅ Approve")));
+  }
+
+  /**
+   * Card to create a ready-to-use login for a guest or staff member — the
+   * admin sets the username (email), a temporary password and the role, and
+   * hands the credentials over. No email verification / approval wait (the
+   * admin is vouching for it). Optional expiry date for temporary guests.
+   */
+  function buildGuestCard() {
+    const nameI = el("input", { type: "text", placeholder: "Full name" });
+    const emailI = el("input", { type: "email", placeholder: "login@brandix.com", autocomplete: "off" });
+    const passI = el("input", { type: "text", placeholder: "Temporary password (min 6 chars)", autocomplete: "off" });
+    const deptI = el("input", { type: "text", placeholder: "Department (optional)", list: "guest-depts" });
+    const dl = el("datalist", { id: "guest-depts" },
+      ...uniq(activeEmps(empList(getCached("employees"))), (e) => e.department).map((d) => el("option", { value: d })));
+    // Simple role labels mapped to the app's canonical roles.
+    const roleI = el("select", {},
+      el("option", { value: "management" }, "Viewer (read-only)"),
+      el("option", { value: "hr_executive" }, "Editor (day-to-day HR)"),
+      el("option", { value: "hr_admin" }, "Admin (full control)"));
+    const expiryI = el("input", { type: "date" });
+    const out = el("div");
+
+    return el("div", { class: "card" },
+      el("div", { class: "card-head" }, el("h4", {}, "🔑 Create guest / staff login")),
+      el("p", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
+        "Create a ready-to-use login and share the username + password. It works immediately (no email verification or approval wait). Set an expiry date for a temporary guest — access is blocked after it. You stay signed in as yourself."),
+      el("div", { class: "form-grid" },
+        el("label", { class: "field" }, el("span", {}, "Name"), nameI),
+        el("label", { class: "field" }, el("span", {}, "Username (email)"), emailI),
+        el("label", { class: "field" }, el("span", {}, "Temporary password"), passI),
+        el("label", { class: "field" }, el("span", {}, "Role"), roleI),
+        el("label", { class: "field" }, el("span", {}, "Department (for Dept. Managers)"), deptI, dl),
+        el("label", { class: "field" }, el("span", {}, "Expires (optional)"), expiryI)),
+      el("button", {
+        class: "btn btn-primary", style: { marginTop: "10px" },
+        onclick: async (e) => {
+          const email = emailI.value.trim();
+          const password = passI.value;
+          if (!email || password.length < 6) { toast("Enter an email and a password of at least 6 characters", "warn"); return; }
+          const btn = e.target; btn.disabled = true; btn.textContent = "Creating…";
+          try {
+            const expiresAt = expiryI.value ? new Date(expiryI.value + "T23:59:59").getTime() : null;
+            await createGuestAccount({ email, password, name: nameI.value.trim(), role: roleI.value, department: deptI.value.trim(), expiresAt });
+            out.replaceChildren(el("div", { class: "card", style: { padding: "10px 14px", marginTop: "10px" } },
+              el("p", { html: `✅ Login created. Share these credentials:` }),
+              el("p", {}, el("strong", {}, "Username: "), email),
+              el("p", {}, el("strong", {}, "Password: "), password),
+              el("p", { class: "muted", style: { fontSize: "12px" } }, `Role: ${roleLabel(roleI.value)}${expiryI.value ? " · expires " + expiryI.value : ""}. They sign in on the normal login page.`)));
+            toast("Guest login created", "ok");
+            nameI.value = emailI.value = passI.value = deptI.value = expiryI.value = "";
+          } catch (err) {
+            toast(err?.message || "Could not create the login", "err", 7000);
+          } finally { btn.disabled = false; btn.textContent = "Create login"; }
+        },
+      }, "Create login"),
+      out);
   }
 
   /** Send a Firebase password-reset email — the secure way to unlock/reset a user's login. */

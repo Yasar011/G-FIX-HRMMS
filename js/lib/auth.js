@@ -17,7 +17,7 @@
 import {
   auth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, updateProfile,
-  sendEmailVerification, track,
+  sendEmailVerification, secondaryAuth, track,
 } from "./firebase.js";
 import { read, dbSet, dbUpdate, watch } from "./store.js";
 
@@ -113,8 +113,15 @@ export function initAuth(onUser) {
       }
 
       // Keep currentUser live — role changes apply without re-login.
-      profileUnsub = watch(path, (p) => {
+      profileUnsub = watch(path, async (p) => {
         if (!p) return;
+        // Temporary guest accounts expire — deny access past their date.
+        if (p.expiresAt && Date.now() > Number(p.expiresAt)) {
+          currentUser = null;
+          await signOut(auth).catch(() => {});
+          onUser(null, "This guest access has expired. Ask an HR Admin for a new invite.");
+          return;
+        }
         currentUser = { uid: fbUser.uid, emailVerified: fbUser.emailVerified, ...p };
         onUser(currentUser);
       });
@@ -154,6 +161,34 @@ export async function register(email, password, { name = "", department = "", em
     pendingRegistration = null;
     throw new Error(friendlyAuthError(e));
   }
+}
+
+/**
+ * Admin-only: create a login for someone else (guest / staff invite) with a
+ * role assigned up front — no email-verification or approval wait. Uses a
+ * SECONDARY Firebase app so the admin's own session is never disturbed. The
+ * admin's session then writes the profile with the chosen role (permitted by
+ * the users/{uid} child rules for hr_admin).
+ * @param {object} o {email, password, name, role, department, expiresAt?}
+ * @returns {string} the new user's uid
+ */
+export async function createGuestAccount({ email, password, name = "", role = "management", department = "", expiresAt = null }) {
+  let cred;
+  try {
+    cred = await createUserWithEmailAndPassword(secondaryAuth(), email, password);
+    if (name) await updateProfile(cred.user, { displayName: name }).catch(() => {});
+  } catch (e) { throw new Error(friendlyAuthError(e)); }
+
+  const uid = cred.user.uid;
+  const profile = {
+    email, name: name || email.split("@")[0], role, department,
+    empId: "", createdAt: Date.now(), adminCreated: true,
+  };
+  if (expiresAt) profile.expiresAt = Number(expiresAt);
+  // Written from the admin's primary session (child-level rules allow hr_admin).
+  await dbUpdate(`users/${uid}`, profile);
+  await signOut(secondaryAuth()).catch(() => {});
+  return uid;
 }
 
 /** Re-check whether the signed-in user has clicked their email verification link yet. */

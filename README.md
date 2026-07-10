@@ -44,6 +44,10 @@ backed entirely by **Firebase** (Auth, Realtime Database, Storage, Analytics).
 > Everyone who registers afterwards must verify their email, then waits with
 > **no access at all** until an HR Admin reviews them in **Settings → Pending
 > Approvals** and assigns a role and department.
+>
+> HR Admins can also create a ready-to-use login directly in **Settings →
+> Create guest / staff login** (username + password + role, optional expiry) —
+> handy for temporary guest access. These skip the verify/approval wait.
 
 ### Try it with demo data
 

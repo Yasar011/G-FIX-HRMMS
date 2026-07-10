@@ -48,8 +48,9 @@ function onAuthChanged(user, errorMessage) {
     return;
   }
 
-  // Gate 1: must verify their email before anything else.
-  if (!user.emailVerified) {
+  // Gate 1: must verify their email before anything else — unless this is an
+  // admin-created guest/staff account (the admin vouched for it up front).
+  if (!user.emailVerified && !user.adminCreated) {
     shellReady = false;
     showGateScreen("verify-email-screen");
     $("verify-email-address").textContent = user.email || "";
