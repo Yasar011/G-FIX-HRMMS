@@ -5,7 +5,7 @@
  * Role guards come from the capability matrix in lib/auth.js. On navigation the
  * previous page's realtime subscriptions are disposed via store.disposePage().
  */
-import { can, currentUser } from "./lib/auth.js";
+import { can, currentUser, canonicalRole } from "./lib/auth.js";
 import { disposePage } from "./lib/store.js";
 import { el } from "./lib/utils.js";
 import { emptyState } from "./lib/ui.js";
@@ -63,15 +63,17 @@ export function buildSidebar() {
 /** Navigate to the page named in the current hash. */
 export async function route() {
   if (!currentUser) return;
+
+  // Parse the hash safely: "#/dashboard" → "dashboard"
+  const rawHash = location.hash || "";
+  const id = rawHash.replace(/^#\//, "").split("/")[0] || "";
   const def = canonicalRole(currentUser.role) === "employee" ? "my_portal" : "dashboard";
-  let hash = location.hash || `#/${def}`;
-  if (hash === "#" || hash === "#/") hash = `#/${def}`;
-  
-  // Safely parse the hash path
-  const parts = hash.split("/");
-  const id = parts.length > 1 ? parts[1] : def;
-  
-  const page = PAGES.find((p) => p.id === id) || PAGES.find(p => p.id === def) || PAGES[0];
+
+  // Find the matching page or fall back to default
+  const page = (id ? PAGES.find((p) => p.id === id) : null)
+    || PAGES.find((p) => p.id === def)
+    || PAGES[0];
+
   const container = document.getElementById("page-container");
 
   // Guard
@@ -84,7 +86,7 @@ export async function route() {
   document.querySelectorAll(".nav-item[data-page]").forEach((n) =>
     n.classList.toggle("active", n.dataset.page === page.id));
   document.getElementById("page-title").textContent = page.title;
-  document.querySelector(".app")?.classList.remove("sidebar-open"); // close mobile drawer
+  document.querySelector(".app")?.classList.remove("sidebar-open");
 
   // Dispose previous page's listeners, then render
   disposePage();
@@ -94,10 +96,10 @@ export async function route() {
     el("div", { class: "skeleton", style: { height: "300px" } })));
   try {
     const mod = await page.mod();
-    if (current !== page.id) return; // user navigated away while loading
+    if (current !== page.id) return;
     const root = el("div", { class: "page" });
     container.replaceChildren(root);
-    await mod.render(root, parts.slice(2));
+    await mod.render(root);
     track("page_view", { page: page.id });
   } catch (e) {
     console.error(`Failed to render page "${page.id}"`, e);
