@@ -18,21 +18,22 @@ import { track } from "./lib/firebase.js";
  * flat list of 17 items.
  */
 export const PAGES = [
-  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, group: "Overview", mod: () => import("./pages/dashboard.js") },
-  { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, group: "Attendance & Data", mod: () => import("./pages/attendance.js") },
+  { id: "my_portal", title: "My Portal", icon: "👤", cap: "view_self_service", group: "Self Service", mod: () => import("./pages/my_portal.js") },
+  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: "view_dashboard", group: "Overview", mod: () => import("./pages/dashboard.js") },
+  { id: "attendance", title: "Attendance", icon: "🗓️", cap: "view_dashboard", group: "Attendance & Data", mod: () => import("./pages/attendance.js") },
   { id: "uploads", title: "Data Upload", icon: "⬆️", cap: "upload_attendance", group: "Attendance & Data", mod: () => import("./pages/uploads.js") },
-  { id: "employees", title: "Employees", icon: "👥", cap: null, group: "People", mod: () => import("./pages/employees.js") },
-  { id: "departments", title: "Departments", icon: "🏭", cap: null, group: "People", mod: () => import("./pages/departments.js") },
-  { id: "budget", title: "Budget", icon: "💰", cap: null, group: "Planning", mod: () => import("./pages/budget.js") },
-  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, group: "Planning", mod: () => import("./pages/recruitment.js") },
-  { id: "leaves", title: "Leaves", icon: "🌴", cap: null, group: "HR Operations", mod: () => import("./pages/leaves.js") },
-  { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, group: "HR Operations", mod: () => import("./pages/overtime.js") },
-  { id: "attrition", title: "Attrition", icon: "📉", cap: null, group: "HR Operations", mod: () => import("./pages/attrition.js") },
-  { id: "performance", title: "Performance", icon: "🚀", cap: null, group: "HR Operations", mod: () => import("./pages/performance.js") },
+  { id: "employees", title: "Employees", icon: "👥", cap: "view_dashboard", group: "People", mod: () => import("./pages/employees.js") },
+  { id: "departments", title: "Departments", icon: "🏭", cap: "view_dashboard", group: "People", mod: () => import("./pages/departments.js") },
+  { id: "budget", title: "Budget", icon: "💰", cap: "view_dashboard", group: "Planning", mod: () => import("./pages/budget.js") },
+  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: "view_dashboard", group: "Planning", mod: () => import("./pages/recruitment.js") },
+  { id: "leaves", title: "Leaves", icon: "🌴", cap: "view_dashboard", group: "HR Operations", mod: () => import("./pages/leaves.js") },
+  { id: "overtime", title: "Overtime", icon: "⏱️", cap: "view_dashboard", group: "HR Operations", mod: () => import("./pages/overtime.js") },
+  { id: "attrition", title: "Attrition", icon: "📉", cap: "view_dashboard", group: "HR Operations", mod: () => import("./pages/attrition.js") },
+  { id: "performance", title: "Performance", icon: "🚀", cap: "view_dashboard", group: "HR Operations", mod: () => import("./pages/performance.js") },
   { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", group: "Insights", mod: () => import("./pages/reports.js") },
   { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", group: "Insights", mod: () => import("./pages/email.js") },
-  { id: "notifications", title: "Notifications", icon: "🔔", cap: null, group: "Insights", mod: () => import("./pages/notifications.js") },
-  { id: "analytics", title: "Analytics", icon: "📈", cap: null, group: "Insights", mod: () => import("./pages/analytics.js") },
+  { id: "notifications", title: "Notifications", icon: "🔔", cap: "view_dashboard", group: "Insights", mod: () => import("./pages/notifications.js") },
+  { id: "analytics", title: "Analytics", icon: "📈", cap: "view_dashboard", group: "Insights", mod: () => import("./pages/analytics.js") },
   { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", group: "Admin", mod: () => import("./pages/settings.js") },
   { id: "profile", title: "Profile", icon: "👤", cap: null, group: "Admin", mod: () => import("./pages/profile.js") },
 ];
@@ -62,8 +63,15 @@ export function buildSidebar() {
 /** Navigate to the page named in the current hash. */
 export async function route() {
   if (!currentUser) return;
-  const [, id = "dashboard", ...rest] = location.hash.split("/");
-  const page = PAGES.find((p) => p.id === id) || PAGES[0];
+  const def = canonicalRole(currentUser.role) === "employee" ? "my_portal" : "dashboard";
+  let hash = location.hash || `#/${def}`;
+  if (hash === "#" || hash === "#/") hash = `#/${def}`;
+  
+  // Safely parse the hash path
+  const parts = hash.split("/");
+  const id = parts.length > 1 ? parts[1] : def;
+  
+  const page = PAGES.find((p) => p.id === id) || PAGES.find(p => p.id === def) || PAGES[0];
   const container = document.getElementById("page-container");
 
   // Guard
@@ -89,7 +97,7 @@ export async function route() {
     if (current !== page.id) return; // user navigated away while loading
     const root = el("div", { class: "page" });
     container.replaceChildren(root);
-    await mod.render(root, rest);
+    await mod.render(root, parts.slice(2));
     track("page_view", { page: page.id });
   } catch (e) {
     console.error(`Failed to render page "${page.id}"`, e);
