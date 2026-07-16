@@ -135,7 +135,7 @@ export function chartCard({ title, type = "line", labels = [], datasets = [], op
   const obs = new MutationObserver(() => {
     if (!document.body.contains(card)) { live.delete(chart); chart.destroy(); obs.disconnect(); }
   });
-  obs.observe(document.getElementById("page-container") || document.body, { childList: true, subtree: false });
+  obs.observe(document.getElementById("page-container") || document.body, { childList: true, subtree: true });
   return card;
 }
 

@@ -268,7 +268,8 @@ export function otByDimension(attendance, dates, employees, dim, otRate = 0) {
 /** Headcount at end of each month (from doj / resignDate). */
 export function headcountTrend(employees, n = 12) {
   return lastMonths(n).map((m) => {
-    const endOfMonth = `${m}-31`;
+    const [y, mon] = m.split("-").map(Number);
+    const endOfMonth = `${m}-${new Date(y, mon, 0).getDate().toString().padStart(2, "0")}`;
     const count = employees.filter((e) =>
       e.doj && e.doj <= endOfMonth &&
       !(e.status === "resigned" && e.resignDate && e.resignDate <= endOfMonth)).length;

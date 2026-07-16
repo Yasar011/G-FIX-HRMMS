@@ -154,8 +154,8 @@ export async function render(root) {
     await dbUpdate(`leaves/${leave.empId}/${leave._key}`, patch);
     if (status === "approved") {
       const updates = {};
-      if (leave.halfDay) updates[`${leave.from}/${leave.empId}`] = { status: "HD" };
-      else for (const d of dateRange(leave.from, leave.to)) updates[`${d}/${leave.empId}`] = { status: "L" };
+      if (leave.halfDay) updates[`${leave.from}/${leave.empId}/status`] = "HD";
+      else for (const d of dateRange(leave.from, leave.to)) updates[`${d}/${leave.empId}/status`] = "L";
       await dbUpdate("attendance", updates);
       notify("leave", "Leave approved", `${leave.name}: ${leave.type}, ${span}`);
     }
