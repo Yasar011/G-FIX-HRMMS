@@ -64,9 +64,11 @@ export function buildSidebar() {
 export async function route() {
   if (!currentUser) return;
 
-  // Parse the hash safely: "#/dashboard" → "dashboard"
+  // Parse the hash safely: "#/departments/Sewing" → id="departments", params=["Sewing"]
   const rawHash = location.hash || "";
-  const id = rawHash.replace(/^#\//, "").split("/")[0] || "";
+  const segments = rawHash.replace(/^#\//, "").split("/");
+  const id = segments[0] || "";
+  const params = segments.slice(1); // sub-path params passed to render()
   const def = canonicalRole(currentUser.role) === "employee" ? "my_portal" : "dashboard";
 
   // Find the matching page or fall back to default
@@ -99,7 +101,7 @@ export async function route() {
     if (current !== page.id) return;
     const root = el("div", { class: "page" });
     container.replaceChildren(root);
-    await mod.render(root);
+    await mod.render(root, params);
     track("page_view", { page: page.id });
   } catch (e) {
     console.error(`Failed to render page "${page.id}"`, e);
