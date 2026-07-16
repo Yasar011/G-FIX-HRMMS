@@ -108,11 +108,11 @@ export function dayStats(dayObj, employees) {
 }
 
 /** Per-employee accumulation over a set of dates. */
-export function employeeAttendance(empId, attendance, dates) {
+export function employeeAttendance(empId, attendance, dates, opts = {}) {
   const out = { present: 0, absent: 0, leave: 0, late: 0, halfDay: 0, wfh: 0, holiday: 0, earlyOut: 0, otHours: 0, workMin: 0, marked: 0, records: [] };
   for (const d of dates) {
     const r = attendance?.[d]?.[empId];
-    if (!r) continue;
+    if (!r || (opts.shift && r.shift !== opts.shift)) continue;
     out.records.push({ date: d, ...r });
     if (r.status === "H") { out.holiday++; continue; }
     out.marked++;
@@ -196,14 +196,14 @@ export function monthlyTrend(attendance, employees, n = 12) {
 }
 
 /** Attendance % grouped by an employee dimension (department/section/module/buyer). */
-export function groupAttendance(attendance, employees, dates, dim) {
+export function groupAttendance(attendance, employees, dates, dim, opts = {}) {
   const emps = activeEmps(employees);
   const groups = groupBy(emps, (e) => e[dim] || "—");
   const out = [];
   for (const [name, members] of groups) {
     let present = 0, marked = 0, late = 0, ot = 0;
     for (const e of members) {
-      const a = employeeAttendance(e.id, attendance, dates);
+      const a = employeeAttendance(e.id, attendance, dates, opts);
       present += a.present; marked += a.marked; late += a.late; ot += a.otHours;
     }
     out.push({
@@ -213,6 +213,35 @@ export function groupAttendance(attendance, employees, dates, dim) {
     });
   }
   return out.sort((a, b) => b.attendancePct - a.attendancePct);
+}
+
+/** Attendance % grouped by Shift over a set of dates for scoped employees. */
+export function groupAttendanceByShift(attendance, employees, dates) {
+  const emps = activeEmps(employees);
+  const byId = new Set(emps.map(e => e.id));
+  const groups = new Map();
+  const bump = (shift, status) => {
+    let g = groups.get(shift);
+    if (!g) { g = { present: 0, marked: 0 }; groups.set(shift, g); }
+    if (status !== "H") {
+      g.marked++;
+      if (PRESENT_LIKE.has(status)) g.present++;
+    }
+  };
+  
+  for (const d of dates) {
+    if (!attendance?.[d]) continue;
+    for (const [id, r] of Object.entries(attendance[d])) {
+      if (byId.has(id) && r.shift) {
+        bump(r.shift, r.status);
+      }
+    }
+  }
+  
+  return [...groups.entries()].map(([shift, g]) => ({
+    shift,
+    attendancePct: g.marked ? (g.present / g.marked) * 100 : 0
+  })).sort((a, b) => b.attendancePct - a.attendancePct);
 }
 
 /* =============== Overtime =============== */

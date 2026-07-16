@@ -24,7 +24,7 @@ import { parseAttendanceWorkbook, importAttendance } from "../lib/importers.js";
 import {
   el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo, addDays, dateRange,
 } from "../lib/utils.js";
-import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
+import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS, groupAttendance, groupAttendanceByShift } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
@@ -45,7 +45,6 @@ export async function render(root) {
       if (span === "Date") f.style.display = (view.tab === "daily" || view.tab === "weekly") ? "" : "none";
       if (span === "Month") f.style.display = view.tab === "monthly" ? "" : "none";
       if (span === "From" || span === "To") f.style.display = view.tab === "range" ? "" : "none";
-      if (span === "Shift") f.style.display = view.tab === "daily" ? "" : "none";
     });
   }
 
@@ -230,11 +229,16 @@ export async function render(root) {
     // A KPI-tile click drills the TABLE (not the totals above) into one status/flag.
     const tableRows = view.rowFilter ? rows.filter((r) => r[view.rowFilter.key] === view.rowFilter.value) : rows;
 
+    const byCategory = groupAttendance({ [view.date]: scopedDayObj }, scoped, [view.date], "category");
+    const byShift = groupAttendanceByShift({ [view.date]: scopedDayObj }, scoped, [view.date]);
+
     const summary = [
       { label: "Present", value: stats.present }, { label: "Absent", value: stats.absent },
       { label: "Leave", value: stats.leave }, { label: "Half Day", value: stats.halfDay },
       { label: "Marked", value: stats.marked },
       { label: "Attendance %", value: fmtPct(stats.attendancePct) },
+      ...byCategory.filter(c => ["Direct", "Indirect"].includes(c.name)).map(c => ({ label: `Att (${c.name})`, value: fmtPct(c.attendancePct) })),
+      ...byShift.map(s => ({ label: `Att (Shift ${s.shift})`, value: fmtPct(s.attendancePct) })),
       { label: "Avg Work Hrs", value: fmtNum(stats.avgWorkMin / 60, 1) },
       { label: "Total OT Hrs", value: fmtNum(stats.otHours, 1) },
       { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
@@ -309,7 +313,7 @@ export async function render(root) {
   /** Shared per-employee summary table (weekly/monthly) with Category column + averages. */
   function renderSummary(scoped, dates, opts) {
     const rows = activeEmps(scoped).map((e) => {
-      const a = employeeAttendance(e.id, attendance, dates);
+      const a = employeeAttendance(e.id, attendance, dates, { shift: view.shift });
       return {
         empId: e.id, name: e.name, department: e.department || "—", category: e.category || "—",
         present: a.present, absent: a.absent, leave: a.leave, late: a.late,
@@ -336,12 +340,22 @@ export async function render(root) {
       ot: totOt,
     });
 
+    const byCategory = groupAttendance(attendance, scoped, dates, "category", { shift: view.shift });
+    const byShift = groupAttendanceByShift(attendance, scoped, dates);
+    // If we filtered by shift, byShift will still compute correctly because it groups the raw records. 
+    // We only want to show the selected shift if filtered, or all if not.
+    const shiftChips = view.shift 
+      ? byShift.filter(s => s.shift === view.shift) 
+      : byShift;
+
     const summary = [
       { label: "Employees", value: rows.length },
       { label: "Present", value: totPresent },
       { label: "Absent", value: rows.reduce((s, r) => s + r.absent, 0) },
       { label: "Leave", value: rows.reduce((s, r) => s + r.leave, 0) },
       { label: "Avg Attendance %", value: fmtPct(avgAtt) },
+      ...byCategory.filter(c => ["Direct", "Indirect"].includes(c.name)).map(c => ({ label: `Att (${c.name})`, value: fmtPct(c.attendancePct) })),
+      ...shiftChips.map(s => ({ label: `Att (Shift ${s.shift})`, value: fmtPct(s.attendancePct) })),
       { label: "Avg Work Hrs", value: fmtNum(avgWork, 1) },
       { label: "Total OT Hrs", value: fmtNum(totOt, 1) },
       { label: "Avg OT/Employee", value: fmtNum(rows.length ? totOt / rows.length : 0, 1) },
