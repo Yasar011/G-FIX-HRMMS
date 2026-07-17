@@ -33,6 +33,7 @@ export const PAGES = [
   { id: "email",       title: "Email Automation", icon: "✉️",  cap: "send_email",          group: "Insights",         mod: () => import("./pages/email.js") },
   { id: "notifications",title:"Notifications",   icon: "🔔",  cap: "view_dashboard",      group: "Insights",         mod: () => import("./pages/notifications.js") },
   { id: "analytics",   title: "Analytics",        icon: "📈",  cap: "view_dashboard",      group: "Insights",         mod: () => import("./pages/analytics.js") },
+  { id: "id_card",     title: "ID Card Generator",icon: "🪖",  cap: "view_dashboard",      group: "Tools",            mod: () => import("./pages/id_card.js") },
   { id: "users",       title: "Users & Roles",    icon: "🔐",  cap: "manage_users",        group: "Admin",            mod: () => import("./pages/users.js") },
   { id: "settings",    title: "Settings",         icon: "⚙️",  cap: "manage_settings",     group: "Admin",            mod: () => import("./pages/settings.js") },
   { id: "profile",     title: "Profile",          icon: "👤",  cap: null,                  group: "Admin",            mod: () => import("./pages/profile.js") },
