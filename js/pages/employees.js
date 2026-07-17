@@ -17,6 +17,7 @@ import {
   el, esc, fmtDate, fmtNum, fmtPct, initials, uniq, ym, ymd, yearsSince, minToHm,
 } from "../lib/utils.js";
 import { empList, activeEmps, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
+import { exportXLSX, exportPDF } from "../lib/export.js";
 
 const FIELDS = [
   { id: "id", label: "Employee ID", required: true },
@@ -100,7 +101,9 @@ function renderRegister(root) {
             el("div", { class: "avatar", style: { background: r.photo ? "none" : undefined } },
               r.photo ? el("img", { src: r.photo, alt: "" }) : initials(r.name)),
             el("div", {}, el("div", {}, r.name), el("small", { class: "muted" }, r.id))),
+          // Include both name AND emp ID in search so you can search by ID number
           exportVal: (r) => r.name,
+          searchVal: (r) => `${r.name} ${r.id}`,
         },
         { key: "department", label: "Department" },
         { key: "section", label: "Section" },
@@ -147,6 +150,23 @@ function renderProfile(root, empId) {
       el("div", { class: "page-head" },
         el("button", { class: "btn btn-ghost", onclick: () => { location.hash = "#/employees"; } }, "← Back"),
         el("div", { class: "spacer" }),
+        // ── Download dropdown ──────────────────────────────────────────────
+        el("div", { style: { position: "relative", display: "inline-block" } },
+          el("button", {
+            class: "btn btn-primary",
+            onclick: (e) => {
+              const menu = e.currentTarget.nextElementSibling;
+              menu.style.display = menu.style.display === "block" ? "none" : "block";
+              // Close on outside click
+              const close = (ev) => { if (!menu.contains(ev.target) && ev.target !== e.currentTarget) { menu.style.display = "none"; document.removeEventListener("click", close); } };
+              setTimeout(() => document.addEventListener("click", close), 0);
+            },
+          }, "⬇ Download Report ▾"),
+          el("div", {
+            style: { display: "none", position: "absolute", right: "0", top: "110%", background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "10px", padding: "8px", zIndex: "100", minWidth: "190px", backdropFilter: "blur(12px)", boxShadow: "var(--shadow)" },
+          },
+            el("button", { class: "btn btn-ghost", style: { width: "100%", textAlign: "left", marginBottom: "4px" }, onclick: () => downloadReport("xlsx") }, "📊 Excel — Full Report"),
+            el("button", { class: "btn btn-ghost", style: { width: "100%", textAlign: "left" },              onclick: () => downloadReport("pdf") },  "📄 PDF — Full Report"))),
         canEdit ? el("button", { class: "btn", onclick: () => editEmployee(emp ? { id: empId, ...emp } : null, []) }, "✏️ Edit") : null,
         canEdit ? el("button", { class: "btn btn-danger", onclick: removeEmp }, "🗑 Delete") : null),
 
@@ -215,6 +235,102 @@ function renderProfile(root, empId) {
       if (d.startsWith(year) && attendance[d]?.[empId]?.status === "L") days++;
     }
     return days;
+  }
+
+  /** One-click report: Excel or PDF with every employee detail + attendance summary. */
+  function downloadReport(format) {
+    if (!emp) { toast("Employee data not loaded yet", "warn"); return; }
+    const dates = monthDates(attendance, month);
+    const a = employeeAttendance(empId, attendance, dates);
+
+    // ── Profile section ────────────────────────────────────────────────────
+    const profileRows = [
+      { Field: "Employee ID",       Value: empId },
+      { Field: "Full Name",         Value: emp.name || "—" },
+      { Field: "Status",            Value: emp.status || "active" },
+      { Field: "Department",        Value: emp.department || "—" },
+      { Field: "Section",           Value: emp.section || "—" },
+      { Field: "Module",            Value: emp.module || "—" },
+      { Field: "Buyer",             Value: emp.buyer || "—" },
+      { Field: "Designation",       Value: emp.designation || "—" },
+      { Field: "Grade",             Value: emp.grade || "—" },
+      { Field: "Category",          Value: emp.category || "—" },
+      { Field: "Employment Type",   Value: emp.type || "Permanent" },
+      { Field: "Nationality",       Value: emp.nationality || "Local" },
+      { Field: "Gender",            Value: emp.gender || "—" },
+      { Field: "Date of Birth",     Value: fmtDate(emp.dob) },
+      { Field: "Age",               Value: emp.dob ? `${yearsSince(emp.dob).toFixed(1)} yrs` : "—" },
+      { Field: "Date of Joining",   Value: fmtDate(emp.doj) },
+      { Field: "Service Length",    Value: emp.doj ? `${yearsSince(emp.doj).toFixed(1)} yrs` : "—" },
+      { Field: "OT Rate",           Value: emp.otRate ? fmtNum(emp.otRate) : "—" },
+      { Field: "Email",             Value: emp.email || "—" },
+      { Field: "Phone",             Value: emp.phone || "—" },
+    ];
+
+    // ── Attendance summary for selected month ──────────────────────────────
+    const summaryRows = [
+      { Metric: "Report Month",     Value: month },
+      { Metric: "Attendance %",     Value: fmtPct(a.attendancePct) },
+      { Metric: "Present Days",     Value: a.present },
+      { Metric: "Absent Days",      Value: a.absent },
+      { Metric: "Leave Days",       Value: a.leave },
+      { Metric: "Half Days",        Value: a.halfDay },
+      { Metric: "WFH Days",         Value: a.wfh },
+      { Metric: "Late Arrivals",    Value: a.late },
+      { Metric: "Early Outs",       Value: a.earlyOut },
+      { Metric: "OT Hours",         Value: fmtNum(a.otHours, 1) },
+      { Metric: "Total Work Hours", Value: fmtNum(a.workMin / 60, 1) },
+    ];
+
+    // ── Daily attendance records ──────────────────────────────────────────
+    const attColumns = [
+      { key: "date",    label: "Date" },
+      { key: "status", label: "Status" },
+      { key: "in",     label: "In" },
+      { key: "out",    label: "Out" },
+      { key: "hours",  label: "Work Hrs" },
+      { key: "ot",     label: "OT Hrs" },
+      { key: "flags",  label: "Flags" },
+    ];
+    const attRows = a.records.map((r) => ({
+      date:   fmtDate(r.date),
+      status: ATT_STATUS[r.status]?.label || r.status || "—",
+      in:     r.in || "—",
+      out:    r.out || "—",
+      hours:  minToHm(r.workMin),
+      ot:     String(r.otHours || 0),
+      flags:  [r.late && "Late", r.earlyOut && "Early Out"].filter(Boolean).join(", ") || "—",
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    const fileName = `${emp.name}_${empId}_${month}`;
+    const reportTitle = `Employee Report — ${emp.name} (ID ${empId})`;
+    const subtitle = `${emp.designation || ""} · ${emp.department || ""}`;
+
+    if (format === "xlsx") {
+      // Build workbook with 3 sheets: Profile, Attendance Summary, Daily Log
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(profileRows), "Profile");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Att Summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attRows), "Daily Log");
+      XLSX.writeFile(wb, `${fileName}.xlsx`);
+      toast("Excel report downloaded", "ok");
+    } else {
+      // PDF: Profile info + summary strip + daily table
+      const allRows = [
+        ...profileRows.map((r) => ({ ...r, _section: "profile" })),
+        { Field: "", Value: "" }, // spacer
+        ...summaryRows.map((r) => ({ Field: r.Metric, Value: r.Value, _section: "summary" })),
+        { Field: "", Value: "" }, // spacer
+        ...attRows.map((r) => ({ Field: r.date, Value: `${r.status} | In: ${r.in} Out: ${r.out} | ${r.hours}h OT: ${r.ot} ${r.flags !== "—" ? "[" + r.flags + "]" : ""}` })),
+      ];
+      exportPDF(attRows.length ? attRows : [{ date: "No records", status: "", in: "", out: "", hours: "", ot: "", flags: "" }],
+        fileName, attColumns, {
+          title: reportTitle,
+          subtitle,
+          summary: summaryRows.map((r) => ({ label: r.Metric, value: r.Value })),
+        });
+      toast("PDF report downloaded", "ok");
+    }
   }
 
   function photoUploader() {

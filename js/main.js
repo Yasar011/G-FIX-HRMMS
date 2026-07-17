@@ -82,7 +82,7 @@ function onAuthChanged(user, errorMessage) {
     // Email automation heartbeat (lazy — EmailJS may not be configured yet).
     import("./lib/emailer.js").then((m) => m.startAutomationLoop()).catch(console.error);
     if (!location.hash || location.hash === "#" || location.hash === "#/") {
-      location.hash = canonicalRole(user.role) === "employee" ? "#/my_portal" : "#/dashboard";
+      location.hash = "#/dashboard";
     }
   }
   route();
