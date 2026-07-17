@@ -237,100 +237,254 @@ function renderProfile(root, empId) {
     return days;
   }
 
-  /** One-click report: Excel or PDF with every employee detail + attendance summary. */
+  /** One-click professional HR dossier — Excel (3 sheets) or fully formatted PDF. */
   function downloadReport(format) {
     if (!emp) { toast("Employee data not loaded yet", "warn"); return; }
     const dates = monthDates(attendance, month);
-    const a = employeeAttendance(empId, attendance, dates);
+    const a     = employeeAttendance(empId, attendance, dates);
+    const safe  = (v) => v || "—";
+    const fn    = `${(emp.name || empId).replace(/\s+/g, "_")}_${empId}_${month}`;
 
-    // ── Profile section ────────────────────────────────────────────────────
-    const profileRows = [
-      { Field: "Employee ID",       Value: empId },
-      { Field: "Full Name",         Value: emp.name || "—" },
-      { Field: "Status",            Value: emp.status || "active" },
-      { Field: "Department",        Value: emp.department || "—" },
-      { Field: "Section",           Value: emp.section || "—" },
-      { Field: "Module",            Value: emp.module || "—" },
-      { Field: "Buyer",             Value: emp.buyer || "—" },
-      { Field: "Designation",       Value: emp.designation || "—" },
-      { Field: "Grade",             Value: emp.grade || "—" },
-      { Field: "Category",          Value: emp.category || "—" },
-      { Field: "Employment Type",   Value: emp.type || "Permanent" },
-      { Field: "Nationality",       Value: emp.nationality || "Local" },
-      { Field: "Gender",            Value: emp.gender || "—" },
-      { Field: "Date of Birth",     Value: fmtDate(emp.dob) },
-      { Field: "Age",               Value: emp.dob ? `${yearsSince(emp.dob).toFixed(1)} yrs` : "—" },
-      { Field: "Date of Joining",   Value: fmtDate(emp.doj) },
-      { Field: "Service Length",    Value: emp.doj ? `${yearsSince(emp.doj).toFixed(1)} yrs` : "—" },
-      { Field: "OT Rate",           Value: emp.otRate ? fmtNum(emp.otRate) : "—" },
-      { Field: "Email",             Value: emp.email || "—" },
-      { Field: "Phone",             Value: emp.phone || "—" },
-    ];
+    // shared daily log rows
+    const logRows = a.records
+      .slice().sort((x, y) => x.date.localeCompare(y.date))
+      .map((r) => ({
+        Date:       fmtDate(r.date),
+        Status:     ATT_STATUS[r.status]?.label || r.status || "—",
+        "In":       r.in  || "—",
+        "Out":      r.out || "—",
+        "Work Hrs": minToHm(r.workMin),
+        "OT Hrs":   String(r.otHours || 0),
+        Flags:      [r.late && "Late", r.earlyOut && "Early Out"].filter(Boolean).join(", ") || "—",
+      }));
 
-    // ── Attendance summary for selected month ──────────────────────────────
-    const summaryRows = [
-      { Metric: "Report Month",     Value: month },
-      { Metric: "Attendance %",     Value: fmtPct(a.attendancePct) },
-      { Metric: "Present Days",     Value: a.present },
-      { Metric: "Absent Days",      Value: a.absent },
-      { Metric: "Leave Days",       Value: a.leave },
-      { Metric: "Half Days",        Value: a.halfDay },
-      { Metric: "WFH Days",         Value: a.wfh },
-      { Metric: "Late Arrivals",    Value: a.late },
-      { Metric: "Early Outs",       Value: a.earlyOut },
-      { Metric: "OT Hours",         Value: fmtNum(a.otHours, 1) },
-      { Metric: "Total Work Hours", Value: fmtNum(a.workMin / 60, 1) },
-    ];
-
-    // ── Daily attendance records ──────────────────────────────────────────
-    const attColumns = [
-      { key: "date",    label: "Date" },
-      { key: "status", label: "Status" },
-      { key: "in",     label: "In" },
-      { key: "out",    label: "Out" },
-      { key: "hours",  label: "Work Hrs" },
-      { key: "ot",     label: "OT Hrs" },
-      { key: "flags",  label: "Flags" },
-    ];
-    const attRows = a.records.map((r) => ({
-      date:   fmtDate(r.date),
-      status: ATT_STATUS[r.status]?.label || r.status || "—",
-      in:     r.in || "—",
-      out:    r.out || "—",
-      hours:  minToHm(r.workMin),
-      ot:     String(r.otHours || 0),
-      flags:  [r.late && "Late", r.earlyOut && "Early Out"].filter(Boolean).join(", ") || "—",
-    })).sort((a, b) => a.date.localeCompare(b.date));
-
-    const fileName = `${emp.name}_${empId}_${month}`;
-    const reportTitle = `Employee Report — ${emp.name} (ID ${empId})`;
-    const subtitle = `${emp.designation || ""} · ${emp.department || ""}`;
-
+    /* ═══ EXCEL ════════════════════════════════════════════════════════ */
     if (format === "xlsx") {
-      // Build workbook with 3 sheets: Profile, Attendance Summary, Daily Log
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(profileRows), "Profile");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Att Summary");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attRows), "Daily Log");
-      XLSX.writeFile(wb, `${fileName}.xlsx`);
-      toast("Excel report downloaded", "ok");
-    } else {
-      // PDF: Profile info + summary strip + daily table
-      const allRows = [
-        ...profileRows.map((r) => ({ ...r, _section: "profile" })),
-        { Field: "", Value: "" }, // spacer
-        ...summaryRows.map((r) => ({ Field: r.Metric, Value: r.Value, _section: "summary" })),
-        { Field: "", Value: "" }, // spacer
-        ...attRows.map((r) => ({ Field: r.date, Value: `${r.status} | In: ${r.in} Out: ${r.out} | ${r.hours}h OT: ${r.ot} ${r.flags !== "—" ? "[" + r.flags + "]" : ""}` })),
+
+      // Sheet 1 — Employee Profile (2-column key/value layout)
+      const p = emp;
+      const profileAOA = [
+        ["EMPLOYEE PROFILE REPORT", "", "", ""],
+        [`Generated: ${new Date().toLocaleString()}`, "", "", ""],
+        [],
+        ["PERSONAL DETAILS", "", "EMPLOYMENT DETAILS", ""],
+        ["Employee ID",     empId,                                      "Department",       safe(p.department)],
+        ["Full Name",       safe(p.name),                               "Section",          safe(p.section)],
+        ["Status",          (p.status || "active").toUpperCase(),       "Module",           safe(p.module)],
+        ["Gender",          safe(p.gender),                             "Buyer",            safe(p.buyer)],
+        ["Nationality",     safe(p.nationality),                        "Designation",      safe(p.designation)],
+        ["Date of Birth",   fmtDate(p.dob),                            "Grade",            safe(p.grade)],
+        ["Age",             p.dob ? `${yearsSince(p.dob).toFixed(1)} yrs` : "—", "Category", safe(p.category)],
+        ["Phone",           safe(p.phone),                              "Emp Type",         safe(p.type) || "Permanent"],
+        ["Email",           safe(p.email),                              "Date of Joining",  fmtDate(p.doj)],
+        ["", "",                                                         "Service Length",   p.doj ? `${yearsSince(p.doj).toFixed(1)} yrs` : "—"],
+        ["", "",                                                         "OT Rate",          p.otRate ? fmtNum(p.otRate) : "—"],
       ];
-      exportPDF(attRows.length ? attRows : [{ date: "No records", status: "", in: "", out: "", hours: "", ot: "", flags: "" }],
-        fileName, attColumns, {
-          title: reportTitle,
-          subtitle,
-          summary: summaryRows.map((r) => ({ label: r.Metric, value: r.Value })),
-        });
-      toast("PDF report downloaded", "ok");
+      const ws1 = XLSX.utils.aoa_to_sheet(profileAOA);
+      ws1["!cols"] = [{ wch: 18 }, { wch: 24 }, { wch: 18 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, ws1, "Employee Profile");
+
+      // Sheet 2 — Attendance Summary
+      const sumAOA = [
+        ["ATTENDANCE SUMMARY", ""],
+        [`Report Month: ${month}`, ""],
+        [],
+        ["Metric",             "Value"],
+        ["Attendance %",       fmtPct(a.attendancePct)],
+        ["Present Days",       a.present],
+        ["Absent Days",        a.absent],
+        ["Leave Days",         a.leave],
+        ["Half Days",          a.halfDay],
+        ["WFH Days",           a.wfh],
+        ["Late Arrivals",      a.late],
+        ["Early Outs",         a.earlyOut],
+        ["OT Hours",           fmtNum(a.otHours, 1)],
+        ["Total Work Hours",   fmtNum(a.workMin / 60, 1)],
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(sumAOA);
+      ws2["!cols"] = [{ wch: 22 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, ws2, "Attendance Summary");
+
+      // Sheet 3 — Daily Log
+      const ws3 = XLSX.utils.json_to_sheet(logRows.length ? logRows : [{ Date: "No records for this month" }]);
+      ws3["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, ws3, "Daily Log");
+
+      XLSX.writeFile(wb, `${fn}.xlsx`);
+      toast("Excel report downloaded", "ok");
+      return;
     }
+
+    /* ═══ PDF — professional HR dossier ════════════════════════════════════ */
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pw  = doc.internal.pageSize.getWidth();    // 595 pt
+    const ph  = doc.internal.pageSize.getHeight();   // 842 pt
+    const ML  = 36, MR = 36, CW = pw - ML - MR;     // margins + content width = 523 pt
+
+    // Colours
+    const INDIGO = [63, 81, 181], DARK = [25, 30, 55], MID = [80, 95, 145];
+    const LITE = [235, 238, 255], WHITE = [255, 255, 255];
+    const OK = [34, 197, 94], BAD = [239, 68, 68], WARN = [234, 179, 8];
+
+    const fill = (r, g, b) => doc.setFillColor(r, g, b);
+    const ink  = (r, g, b) => doc.setTextColor(r, g, b);
+    const fnt  = (sz, bold) => { doc.setFontSize(sz); doc.setFont(undefined, bold ? "bold" : "normal"); };
+    const drawRect = (x, y, w, h, col, mode = "F") => { fill(...col); doc.rect(x, y, w, h, mode); };
+    const txt = (s, x, y, sz, col, bold, align = "left", mw) => {
+      ink(...col); fnt(sz, bold);
+      doc.text(String(s ?? "—"), x, y, { align, maxWidth: mw });
+    };
+    const hr = (y, col = [210, 215, 240]) => { doc.setDrawColor(...col); doc.setLineWidth(0.35); doc.line(ML, y, ML + CW, y); };
+
+    let Y = 0;
+
+    // ── Header band ───────────────────────────────────────────────────
+    drawRect(0, 0, pw, 58, INDIGO);
+    txt("Brandix Unit 3  —  HR Analytics", ML, 22, 15, WHITE, true);
+    txt(`Employee Dossier  ·  Generated ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}  ·  ${new Date().toLocaleTimeString()}`, ML, 40, 8.5, [190, 205, 255], false);
+    Y = 58;
+
+    // ── Name / Identity card ───────────────────────────────────
+    drawRect(0, Y, pw, 62, LITE);
+    // initials avatar circle
+    const ini = (emp.name || "?").split(" ").map(w => w[0] || "").slice(0, 2).join("").toUpperCase();
+    fill(...MID); doc.circle(ML + 24, Y + 31, 22, "F");
+    txt(ini, ML + 24, Y + 36, 13, WHITE, true, "center");
+    // name + sub-title
+    txt(emp.name || "Unknown", ML + 56, Y + 26, 14, DARK, true);
+    txt(`${safe(emp.designation)}  ·  ${safe(emp.department)}${emp.section ? " / " + emp.section : ""}`, ML + 56, Y + 41, 9, MID, false);
+    // ID badge (right)
+    drawRect(pw - MR - 74, Y + 14, 72, 17, INDIGO); fill(...INDIGO);
+    txt(`EMP  ${empId}`, pw - MR - 38, Y + 25.5, 8.5, WHITE, true, "center");
+    // status badge
+    const stCol = (emp.status === "active") ? OK : (emp.status === "resigned") ? BAD : WARN;
+    drawRect(pw - MR - 74, Y + 35, 72, 14, stCol);
+    txt((emp.status || "ACTIVE").toUpperCase(), pw - MR - 38, Y + 45, 7.5, WHITE, true, "center");
+    Y += 62;
+
+    // ── Section header helper ──────────────────────────────────
+    const secHead = (label, y) => {
+      drawRect(ML, y, CW, 17, DARK);
+      txt(label, ML + 8, y + 12, 8.5, WHITE, true);
+      return y + 17;
+    };
+
+    // ── Two-column detail row helper ──────────────────────────
+    const RH = 18, HC = CW / 2;
+    let ri = 0;
+    const dRow = (l1, v1, l2, v2, y) => {
+      if (ri % 2 === 0) drawRect(ML, y, CW, RH, [244, 246, 253]);
+      ri++;
+      // left cell
+      txt(l1, ML + 5,       y + 12, 7.5, MID,  true);
+      txt(v1, ML + 92,      y + 12, 9,   DARK,  false, "left", HC - 96);
+      // right cell (vertical divider)
+      doc.setDrawColor(210, 215, 240); doc.setLineWidth(0.3);
+      doc.line(ML + HC, y, ML + HC, y + RH);
+      if (l2 !== undefined) {
+        txt(l2, ML + HC + 5, y + 12, 7.5, MID,  true);
+        txt(v2, ML + HC + 92, y + 12, 9,  DARK,  false, "left", HC - 96);
+      }
+      hr(y + RH);
+      return y + RH;
+    };
+
+    Y += 6;
+
+    // ────────────────────── PERSONAL DETAILS ─────────────────────
+    Y = secHead("PERSONAL DETAILS", Y); ri = 0;
+    Y = dRow("Employee ID",  empId,                                       "Full Name",       safe(emp.name),        Y);
+    Y = dRow("Gender",        safe(emp.gender),                           "Nationality",     safe(emp.nationality), Y);
+    Y = dRow("Date of Birth", fmtDate(emp.dob),                          "Age",             emp.dob ? `${yearsSince(emp.dob).toFixed(1)} yrs` : "—", Y);
+    Y = dRow("Phone",         safe(emp.phone),                            "Email",           safe(emp.email),       Y);
+    Y += 7;
+
+    // ─────────────────── EMPLOYMENT DETAILS ─────────────────────
+    Y = secHead("EMPLOYMENT DETAILS", Y); ri = 0;
+    Y = dRow("Department",    safe(emp.department),                       "Section",         safe(emp.section),     Y);
+    Y = dRow("Module",        safe(emp.module),                           "Buyer",           safe(emp.buyer),       Y);
+    Y = dRow("Designation",   safe(emp.designation),                      "Grade",           safe(emp.grade),       Y);
+    Y = dRow("Category",      safe(emp.category),                         "Emp Type",        safe(emp.type) || "Permanent", Y);
+    Y = dRow("Date of Joining", fmtDate(emp.doj),                        "Service Length",  emp.doj ? `${yearsSince(emp.doj).toFixed(1)} yrs` : "—", Y);
+    Y = dRow("OT Rate",       emp.otRate ? fmtNum(emp.otRate) : "—",     "Status",          (emp.status || "active").toUpperCase(), Y);
+    Y += 10;
+
+    // ─────────────── ATTENDANCE SUMMARY — KPI boxes ────────────
+    Y = secHead(`ATTENDANCE SUMMARY  —  ${month}`, Y);
+    Y += 7;
+    const kpis = [
+      { lbl: "Attendance %", val: fmtPct(a.attendancePct), col: a.attendancePct >= 95 ? OK : a.attendancePct >= 85 ? WARN : BAD },
+      { lbl: "Present",      val: String(a.present),        col: OK },
+      { lbl: "Absent",       val: String(a.absent),         col: BAD },
+      { lbl: "Leave",        val: String(a.leave),          col: INDIGO },
+      { lbl: "Late",         val: String(a.late),           col: WARN },
+      { lbl: "Half Day",     val: String(a.halfDay),        col: [160, 130, 220] },
+      { lbl: "WFH",          val: String(a.wfh),            col: [56, 180, 240] },
+      { lbl: "Early Out",    val: String(a.earlyOut),       col: [245, 140, 50] },
+      { lbl: "OT Hours",     val: fmtNum(a.otHours, 1),    col: INDIGO },
+      { lbl: "Work Hours",   val: fmtNum(a.workMin / 60, 1), col: MID },
+    ];
+    const KW = CW / 5, KH = 46;
+    kpis.forEach((k, i) => {
+      const kx = ML + (i % 5) * KW;
+      const ky = Y + Math.floor(i / 5) * (KH + 5);
+      drawRect(kx, ky, KW - 4, KH, [244, 246, 253]);   // box
+      drawRect(kx, ky, KW - 4, 4,  k.col);              // colour top strip
+      txt(k.val, kx + (KW - 4) / 2, ky + 27, 14, DARK, true,  "center");
+      txt(k.lbl, kx + (KW - 4) / 2, ky + 41, 7.5, MID, false, "center");
+    });
+    Y += (KH + 5) * 2 + 12;
+
+    // ──────────────────── DAILY ATTENDANCE LOG ─────────────────
+    Y = secHead("DAILY ATTENDANCE LOG", Y);
+    const LCols = [
+      { h: "Date",     w: 80 },
+      { h: "Status",   w: 74 },
+      { h: "In",       w: 44 },
+      { h: "Out",      w: 44 },
+      { h: "Work Hrs", w: 56 },
+      { h: "OT Hrs",   w: 46 },
+      { h: "Flags",    w: CW - 344 },
+    ];
+    // table col header
+    let cx = ML;
+    drawRect(ML, Y, CW, 17, MID);
+    LCols.forEach((c) => { txt(c.h, cx + 4, Y + 12, 8, WHITE, true); cx += c.w; });
+    Y += 17;
+
+    const footer = () => {
+      const pg = doc.internal.getCurrentPageInfo().pageNumber;
+      ink(170, 175, 200); fnt(7.5, false);
+      doc.text(`Brandix Unit 3  ·  G-FIX HR Analytics  ·  Confidential`, ML, ph - 18);
+      doc.text(`Page ${pg}`, pw - MR, ph - 18, { align: "right" });
+    };
+
+    if (!logRows.length) {
+      drawRect(ML, Y, CW, 28, [248, 249, 255]);
+      txt("No attendance records for this month.", ML + CW / 2, Y + 18, 9, MID, false, "center");
+      Y += 28;
+    } else {
+      logRows.forEach((row, idx) => {
+        if (Y > ph - 55) { footer(); doc.addPage(); Y = 40;
+          cx = ML; drawRect(ML, Y, CW, 17, MID);
+          LCols.forEach((c) => { txt(c.h, cx + 4, Y + 12, 8, WHITE, true); cx += c.w; }); Y += 17;
+        }
+        if (idx % 2 === 0) drawRect(ML, Y, CW, 17, [247, 248, 255]);
+        const vals = [row["Date"], row["Status"], row["In"], row["Out"], row["Work Hrs"], row["OT Hrs"], row["Flags"]];
+        cx = ML;
+        LCols.forEach((c, ci) => {
+          const col = ci === 1 && vals[ci].toLowerCase().includes("absent") ? BAD
+                    : ci === 6 && vals[ci] !== "—" ? WARN : DARK;
+          txt(vals[ci] ?? "—", cx + 4, Y + 12, 8, col, ci === 1); cx += c.w;
+        });
+        hr(Y + 17); Y += 17;
+      });
+    }
+    footer();
+    doc.save(`${fn}.pdf`);
+    toast("PDF downloaded", "ok");
   }
 
   function photoUploader() {
