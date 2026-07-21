@@ -215,6 +215,31 @@ export function groupAttendance(attendance, employees, dates, dim) {
   return out.sort((a, b) => b.attendancePct - a.attendancePct);
 }
 
+/**
+ * Attendance % grouped by shift — shift lives on the daily attendance
+ * RECORD (varies day to day), not on the employee, so this scans records
+ * directly rather than grouping by an employee attribute like groupAttendance().
+ */
+export function attendanceByShift(attendance, employees, dates) {
+  const ids = new Set(activeEmps(employees).map((e) => e.id));
+  const groups = new Map(); // shift name -> {present, marked}
+  for (const d of dates) {
+    const day = attendance?.[d];
+    if (!day) continue;
+    for (const [id, r] of Object.entries(day)) {
+      if (!ids.has(id) || r.status === "H") continue;
+      const name = r.shift || "—";
+      let g = groups.get(name);
+      if (!g) { g = { present: 0, marked: 0 }; groups.set(name, g); }
+      g.marked++;
+      if (PRESENT_LIKE.has(r.status)) g.present++;
+    }
+  }
+  return [...groups.entries()]
+    .map(([name, g]) => ({ name, marked: g.marked, present: g.present, attendancePct: g.marked ? (g.present / g.marked) * 100 : 0 }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /* =============== Overtime =============== */
 
 /** OT hours + cost per date over a range. `otRate` = default cost/hour. */
