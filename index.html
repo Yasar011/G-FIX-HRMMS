@@ -14,6 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
   <!-- App styles -->
   <link rel="stylesheet" href="css/variables.css" />
@@ -64,6 +65,7 @@
         <button type="submit" class="btn btn-primary btn-block" id="login-submit">Sign in</button>
         <button type="button" class="btn btn-ghost btn-block" id="register-toggle">Create an account</button>
       </form>
+      <button type="button" class="btn btn-ghost btn-block" id="scan-id-btn" style="margin-top:8px">📷 Scan Employee ID (no login needed)</button>
       <div class="login-roles">
         <span class="chip">HR Admin</span><span class="chip">HR Executive</span>
         <span class="chip">Dept. Manager</span><span class="chip">Management</span>

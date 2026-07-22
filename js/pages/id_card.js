@@ -3,20 +3,24 @@
  *
  * Enter an Employee ID → details auto-fill from the database.
  * Upload a passport photo (stays local, never sent to Firebase).
- * Live card preview + one-click Download PNG / Print.
+ * Live front/back preview + one-click Download PNG / Print, either side.
  *
- * Card size follows the standard CR80 badge (3.375in × 2.125in / 85.6 × 54mm).
+ * Card size follows the standard CR80 badge in PORTRAIT orientation:
+ * 2.125in × 3.375in (54 × 85.6mm). The back side carries a QR code
+ * (the Employee ID) for scanning at gates/kiosks — see the "Scan ID"
+ * button on the login screen, which reads it without signing in.
  */
 import { read } from "../lib/store.js";
 import { el, fmtDate } from "../lib/utils.js";
 import { toast } from "../lib/ui.js";
 
-const LOGO_URL = new URL("../../assets/brandix-logo.jpg", import.meta.url).href;
+const LOGO_URL = new URL("../../assets/brandix-logo.png", import.meta.url).href;
 
 export async function render(root) {
   /* ── State ─────────────────────────────────────────────────────────────── */
   let photoDataUrl = null;  // local only — never stored
   let emp = null;
+  let side = "front"; // "front" | "back"
 
   /* ── Left panel — inputs ────────────────────────────────────────────────── */
   const empIdInput   = el("input", { type: "text",   placeholder: "e.g. 245", id: "idc-empid" });
@@ -35,10 +39,13 @@ export async function render(root) {
   const clearPhotoBtn= el("button",{ class: "btn btn-ghost btn-sm", style: "margin-top:4px; display:none" }, "✕ Remove Photo");
   const printBtn     = el("button",{ class: "btn btn-ghost", id: "idc-print" }, "🖨️ Print");
   const dlBtn        = el("button",{ class: "btn btn-primary", id: "idc-dl"   }, "⬇️ Download PNG");
+  const dlBothBtn    = el("button",{ class: "btn", id: "idc-dl-both" }, "⬇️ Download Both Sides");
 
   /* ── Right panel — live card preview ────────────────────────────────────── */
   const cardEl = el("div", { class: "idc-card", id: "idc-preview" });
-  buildCard();   // initial empty state
+  const sideLabel = el("small", { class: "muted" }, "2.125\" × 3.375\" standard card · Front");
+  const frontTab = el("button", { class: "tab active", onclick: () => setSide("front") }, "Front");
+  const backTab  = el("button", { class: "tab",        onclick: () => setSide("back") },  "Back (QR)");
 
   /* ── Layout ─────────────────────────────────────────────────────────────── */
   root.append(
@@ -70,15 +77,17 @@ export async function render(root) {
         clearPhotoBtn,
         photoThumb,
 
-        el("div", { style: "display:flex; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line)" },
-          printBtn, dlBtn)),
+        el("div", { style: "display:flex; flex-direction:column; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid var(--line)" },
+          el("div", { style: "display:flex; gap:8px" }, printBtn, dlBtn),
+          dlBothBtn)),
 
       // ── Right: live preview ──
       el("div", {},
         el("div", { class: "card" },
           el("div", { class: "card-head" },
             el("h4", {}, "Preview"),
-            el("small", { class: "muted" }, "3.375\" × 2.125\" standard card · updates live as you type")),
+            sideLabel),
+          el("div", { class: "tabs", style: "margin-bottom:12px" }, frontTab, backTab),
           el("div", { style: "display:flex; justify-content:center; padding: 20px 0" }, cardEl)))
     )
   );
@@ -88,9 +97,9 @@ export async function render(root) {
     const style = document.createElement("style");
     style.id = "idc-style";
     style.textContent = `
-      /* ID card — true CR80 badge size: 3.375in × 2.125in (85.6 × 54mm) */
+      /* ID card — CR80 badge, PORTRAIT: 2.125in × 3.375in (54 × 85.6mm) */
       .idc-card {
-        width: 3.375in; height: 2.125in;
+        width: 2.125in; height: 3.375in;
         background: #fff; border-radius: 10px;
         box-shadow: 0 8px 32px rgba(0,0,0,.28);
         font-family: 'Arial', sans-serif;
@@ -101,40 +110,47 @@ export async function render(root) {
       .idc-header {
         width: 100%; background: #fff;
         display: flex; flex-direction: column; align-items: center;
-        padding: 8px 12px 5px;
+        padding: 8px 10px 5px;
         border-bottom: 3px solid #c8102e;
       }
-      .idc-logo-img { height: 30px; object-fit: contain; }
-      .idc-unit { font-size: 8.5px; color: #888; letter-spacing:.5px; margin-top: 2px; }
+      .idc-logo-img { height: 28px; object-fit: contain; }
+      .idc-unit { font-size: 7.5px; color: #888; letter-spacing:.5px; margin-top: 2px; }
       .idc-photo-wrap {
-        margin: 8px 0 6px;
-        width: 80px; height: 96px;
+        margin: 10px 0 6px;
+        width: 76px; height: 92px;
         border: 2px solid #c8102e;
         border-radius: 4px; overflow: hidden;
         background: #f0f0f0;
         display: flex; align-items: center; justify-content: center;
       }
       .idc-photo-wrap img { width:100%; height:100%; object-fit:cover; }
-      .idc-photo-placeholder { color:#bbb; font-size:32px; }
+      .idc-photo-placeholder { color:#bbb; font-size:30px; }
       .idc-body {
-        width:100%; padding: 0 12px 10px;
+        width:100%; padding: 0 10px 10px;
         display: flex; flex-direction: column; align-items: center; text-align: center;
       }
-      .idc-name       { font-size:13px; font-weight:900; color:#1a1a1a; letter-spacing:.5px; margin-bottom:2px; }
-      .idc-desig      { font-size:9.5px; font-weight:700; color:#c8102e; margin-bottom:2px; }
-      .idc-dept       { font-size:9px; color:#444; margin-bottom:4px; }
+      .idc-name       { font-size:12.5px; font-weight:900; color:#1a1a1a; letter-spacing:.3px; margin-bottom:2px; }
+      .idc-desig      { font-size:9px; font-weight:700; color:#c8102e; margin-bottom:2px; }
+      .idc-dept       { font-size:8.5px; color:#444; margin-bottom:5px; }
       .idc-id-row     {
         background:#c8102e; color:#fff; border-radius: 12px;
-        padding: 2px 14px; font-size:8.5px; font-weight:700; letter-spacing:1px;
-        margin-bottom:3px;
+        padding: 2px 12px; font-size:8px; font-weight:700; letter-spacing:1px;
+        margin-bottom:4px;
       }
-      .idc-meta-row   { font-size:8px; color:#555; margin-bottom:1px; }
-      .idc-phone      { font-size:8.5px; color:#555; }
+      .idc-meta-line  { font-size:7.5px; color:#555; line-height:1.5; }
+      .idc-phone      { font-size:8px; color:#555; margin-top:2px; }
       .idc-footer     {
         width:100%; background:#c8102e; color:#fff;
-        text-align:center; font-size:7.5px; padding: 3px 0; letter-spacing:1px;
-        font-weight:700;
+        text-align:center; font-size:7px; padding: 4px 0; letter-spacing:1px;
+        font-weight:700; margin-top: auto;
       }
+      /* Back side */
+      .idc-back { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 16px; box-sizing: border-box; }
+      .idc-back-qr { padding: 8px; background:#fff; border: 2px solid #c8102e; border-radius: 6px; }
+      .idc-back-id { font-size: 10px; font-weight: 800; letter-spacing: 2px; color:#1a1a1a; margin-top: 10px; }
+      .idc-back-name { font-size: 8.5px; color:#555; margin-top: 2px; }
+      .idc-back-note { font-size: 7px; color:#777; text-align:center; margin-top: 14px; line-height: 1.5; padding: 0 8px; }
+      .idc-back-strip { width:100%; background:#c8102e; color:#fff; text-align:center; font-size:7px; padding: 4px 0; letter-spacing:1px; font-weight:700; }
       /* Photo thumb in form */
       .idc-thumb-preview img {
         width:80px; height:96px; object-fit:cover;
@@ -144,7 +160,7 @@ export async function render(root) {
         body * { visibility: hidden !important; }
         #idc-preview, #idc-preview * { visibility: visible !important; }
         #idc-preview {
-          /* No scaling — prints at the card's true 3.375in × 2.125in size. */
+          /* No scaling — prints at the card's true 2.125in × 3.375in size. */
           position: fixed !important; top:50% !important; left:50% !important;
           transform: translate(-50%,-50%) !important;
           box-shadow: none !important;
@@ -154,8 +170,19 @@ export async function render(root) {
     document.head.appendChild(style);
   }
 
-  /* ── Build / refresh card ────────────────────────────────────────────────── */
+  /* ── Side toggle ─────────────────────────────────────────────────────────── */
+  function setSide(s) {
+    side = s;
+    frontTab.classList.toggle("active", s === "front");
+    backTab.classList.toggle("active", s === "back");
+    sideLabel.textContent = `2.125" × 3.375" standard card · ${s === "front" ? "Front" : "Back (QR)"}`;
+    buildCard();
+  }
+
+  /* ── Build / refresh card (whichever side is active) ────────────────────── */
   function buildCard() {
+    if (side === "back") { buildBack(); return; }
+
     const name  = nameInput.value.trim()  || "EMPLOYEE NAME";
     const desig = desigInput.value.trim() || "Designation";
     const dept  = deptInput.value.trim()  || "Department";
@@ -166,8 +193,10 @@ export async function render(root) {
     const empId = empIdInput.value.trim() || "—";
     const unit  = unitInput.value.trim()  || "Unit 3";
 
-    const meta = [grade && `Grade: ${grade}`, doj && `DOJ: ${fmtDate(doj)}`, blood && `Blood: ${blood}`]
-      .filter(Boolean).join("  ·  ");
+    const metaLines = [
+      [grade && `Grade ${grade}`, blood && `Blood ${blood}`].filter(Boolean).join("   ·   "),
+      doj && `DOJ ${fmtDate(doj)}`,
+    ].filter(Boolean);
 
     cardEl.replaceChildren(
       // ── top header ──────────────────────────────────────────────────
@@ -187,13 +216,42 @@ export async function render(root) {
         el("div", { class: "idc-desig" }, desig.toUpperCase()),
         el("div", { class: "idc-dept"  }, dept),
         el("div", { class: "idc-id-row"}, `ID: ${empId}`),
-        meta ? el("div", { class: "idc-meta-row" }, meta) : null,
+        ...metaLines.map((l) => el("div", { class: "idc-meta-line" }, l)),
         phone ? el("div", { class: "idc-phone" }, `📞 ${phone}`) : null),
 
       // ── footer stripe ────────────────────────────────────────────────
       el("div", { class: "idc-footer" }, `BRANDIX APPAREL INDIA  ·  ${unit.toUpperCase()}`)
     );
   }
+
+  /** Back side: QR code encoding the Employee ID, for gate/kiosk scanning. */
+  function buildBack() {
+    const name  = nameInput.value.trim()  || "";
+    const empId = empIdInput.value.trim() || "";
+
+    const qrHost = el("div", { class: "idc-back-qr" });
+    cardEl.replaceChildren(
+      el("div", { class: "idc-back" },
+        qrHost,
+        empId ? el("div", { class: "idc-back-id" }, empId) : null,
+        name ? el("div", { class: "idc-back-name" }, name) : null,
+        el("div", { class: "idc-back-note" },
+          "If found, please return to Brandix Unit 3 HR Department. This card remains the property of Brandix Apparel India.")),
+      el("div", { class: "idc-back-strip" }, "BRANDIX APPAREL INDIA")
+    );
+
+    if (!empId) {
+      qrHost.replaceChildren(el("div", { style: "width:110px;height:110px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:11px;text-align:center" }, "Enter Employee ID for QR"));
+      return;
+    }
+    if (!window.QRCode) {
+      qrHost.replaceChildren(el("div", { style: "width:110px;height:110px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10px;text-align:center" }, "QR library not loaded"));
+      return;
+    }
+    new window.QRCode(qrHost, { text: empId, width: 110, height: 110, colorDark: "#1a1a1a", colorLight: "#ffffff" });
+  }
+
+  buildCard(); // initial empty state
 
   /* ── Wire inputs to refresh card live ───────────────────────────────────── */
   [empIdInput, nameInput, desigInput, deptInput, gradeInput, dojInput, bloodInput, phoneInput, unitInput].forEach((inp) =>
@@ -259,29 +317,51 @@ export async function render(root) {
   /* ── Print ───────────────────────────────────────────────────────────────── */
   root.querySelector("#idc-print").addEventListener("click", () => window.print());
 
-  /* ── Download PNG ────────────────────────────────────────────────────────── */
-  root.querySelector("#idc-dl").addEventListener("click", async () => {
+  /* ── Download PNG (current side) ────────────────────────────────────────── */
+  async function downloadCurrentSide() {
     if (!window.html2canvas) { toast("html2canvas not loaded — check index.html CDN scripts", "warn"); return; }
+    const canvas = await html2canvas(cardEl, {
+      scale: 300 / 96, // render at 300 DPI for a true 2.125in × 3.375in print-quality PNG
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false,
+    });
+    const a = document.createElement("a");
+    const name = nameInput.value.trim().replace(/\s+/g, "_") || "id_card";
+    a.href = canvas.toDataURL("image/png");
+    a.download = `${name}_ID_Card_${side}.png`;
+    a.click();
+  }
+
+  root.querySelector("#idc-dl").addEventListener("click", async () => {
     const btn = root.querySelector("#idc-dl");
     btn.disabled = true; btn.textContent = "Generating…";
     try {
-      const canvas = await html2canvas(cardEl, {
-        scale: 300 / 96, // render at 300 DPI for a true 3.375in × 2.125in print-quality PNG
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
-      });
-      const a = document.createElement("a");
-      const name = nameInput.value.trim().replace(/\s+/g, "_") || "id_card";
-      a.href = canvas.toDataURL("image/png");
-      a.download = `${name}_ID_Card.png`;
-      a.click();
+      await downloadCurrentSide();
       toast("ID Card downloaded!", "ok");
     } catch (e) {
       console.error(e);
       toast("Download failed: " + (e.message || e), "err");
     } finally {
       btn.disabled = false; btn.textContent = "⬇️ Download PNG";
+    }
+  });
+
+  /* ── Download both sides (two files) ────────────────────────────────────── */
+  root.querySelector("#idc-dl-both").addEventListener("click", async () => {
+    const btn = root.querySelector("#idc-dl-both");
+    btn.disabled = true; btn.textContent = "Generating…";
+    const originalSide = side;
+    try {
+      setSide("front"); await new Promise((r) => setTimeout(r, 50)); await downloadCurrentSide();
+      setSide("back");  await new Promise((r) => setTimeout(r, 50)); await downloadCurrentSide();
+      toast("Front + back downloaded!", "ok");
+    } catch (e) {
+      console.error(e);
+      toast("Download failed: " + (e.message || e), "err");
+    } finally {
+      setSide(originalSide);
+      btn.disabled = false; btn.textContent = "⬇️ Download Both Sides";
     }
   });
 }
