@@ -47,6 +47,11 @@ export async function render(root) {
   const frontTab = el("button", { class: "tab active", onclick: () => setSide("front") }, "Front");
   const backTab  = el("button", { class: "tab",        onclick: () => setSide("back") },  "Back (QR)");
 
+  /* ── Hidden pair used only for printing BOTH sides (front page 1, back page 2) ── */
+  const printFrontEl = el("div", { class: "idc-card" });
+  const printBackEl  = el("div", { class: "idc-card" });
+  const printBoth = el("div", { class: "idc-print-both" }, printFrontEl, printBackEl);
+
   /* ── Layout ─────────────────────────────────────────────────────────────── */
   root.append(
     el("div", { class: "page-head" }, el("h3", {}, "🪪 ID Card Generator")),
@@ -89,7 +94,8 @@ export async function render(root) {
             sideLabel),
           el("div", { class: "tabs", style: "margin-bottom:12px" }, frontTab, backTab),
           el("div", { style: "display:flex; justify-content:center; padding: 20px 0" }, cardEl)))
-    )
+    ),
+    printBoth
   );
 
   /* ── Inline CSS for the card ────────────────────────────────────────────── */
@@ -160,15 +166,24 @@ export async function render(root) {
         width:80px; height:96px; object-fit:cover;
         border:2px solid var(--glass-border); border-radius:4px; margin-top:8px;
       }
+      /* Hidden pair used only when printing, so BOTH sides come out (front
+         page 1, back page 2) regardless of which side the preview shows. */
+      .idc-print-both { display: none; }
       @media print {
         body * { visibility: hidden !important; }
-        #idc-preview, #idc-preview * { visibility: visible !important; }
-        #idc-preview {
-          /* No scaling — prints at the card's true 2.125in × 3.375in size. */
-          position: fixed !important; top:50% !important; left:50% !important;
-          transform: translate(-50%,-50%) !important;
-          box-shadow: none !important;
+        .idc-print-both, .idc-print-both * { visibility: visible !important; }
+        .idc-print-both {
+          display: block !important;
+          position: absolute !important; top: 0; left: 0; width: 100%;
         }
+        .idc-print-both .idc-card {
+          /* No scaling — prints at the card's true 2.125in × 3.375in size. */
+          margin: 32px auto;
+          box-shadow: none !important;
+          page-break-after: always;
+          break-after: page;
+        }
+        .idc-print-both .idc-card:last-child { page-break-after: auto; break-after: auto; }
       }
     `;
     document.head.appendChild(style);
@@ -183,17 +198,15 @@ export async function render(root) {
     buildCard();
   }
 
-  /* ── Build / refresh card (whichever side is active) ────────────────────── */
-  function buildCard() {
-    if (side === "back") { buildBack(); return; }
-
+  /* ── Render front side into any target element ───────────────────────────── */
+  function renderFront(target) {
     const name  = nameInput.value.trim()  || "EMPLOYEE NAME";
     const desig = desigInput.value.trim() || "Designation";
     const dept  = deptInput.value.trim()  || "Department";
     const empId = empIdInput.value.trim() || "—";
     const unit  = unitInput.value.trim()  || "Unit 3";
 
-    cardEl.replaceChildren(
+    target.replaceChildren(
       // ── top header ──────────────────────────────────────────────────
       el("div", { class: "idc-header" },
         el("img", { class: "idc-logo-img", src: LOGO_URL, alt: "Brandix", crossorigin: "anonymous" }),
@@ -217,8 +230,8 @@ export async function render(root) {
     );
   }
 
-  /** Back side: QR code encoding the Employee ID, for gate/kiosk scanning. */
-  function buildBack() {
+  /** Render back side (QR code + Grade/DOJ/Blood/Phone) into any target element. */
+  function renderBack(target) {
     const name  = nameInput.value.trim()  || "";
     const empId = empIdInput.value.trim() || "";
     const grade = gradeInput.value.trim() || "";
@@ -234,7 +247,7 @@ export async function render(root) {
     ].filter(Boolean);
 
     const qrHost = el("div", { class: "idc-back-qr" });
-    cardEl.replaceChildren(
+    target.replaceChildren(
       el("div", { class: "idc-back" },
         qrHost,
         empId ? el("div", { class: "idc-back-id" }, empId) : null,
@@ -258,6 +271,12 @@ export async function render(root) {
       return;
     }
     new window.QRCode(qrHost, { text: empId, width: 110, height: 110, colorDark: "#1a1a1a", colorLight: "#ffffff" });
+  }
+
+  /** Refresh the live preview (whichever side is active). */
+  function buildCard() {
+    if (side === "back") renderBack(cardEl);
+    else renderFront(cardEl);
   }
 
   buildCard(); // initial empty state
@@ -323,8 +342,12 @@ export async function render(root) {
     buildCard();
   });
 
-  /* ── Print ───────────────────────────────────────────────────────────────── */
-  root.querySelector("#idc-print").addEventListener("click", () => window.print());
+  /* ── Print (both sides — front page 1, back page 2) ─────────────────────── */
+  root.querySelector("#idc-print").addEventListener("click", () => {
+    renderFront(printFrontEl);
+    renderBack(printBackEl);
+    window.print();
+  });
 
   /* ── Download PNG (current side) ────────────────────────────────────────── */
   async function downloadCurrentSide() {
