@@ -206,8 +206,22 @@ export async function resendVerification() {
   if (auth.currentUser) await sendEmailVerification(auth.currentUser);
 }
 
-/** Sign the current user out. */
-export function logout() { return signOut(auth); }
+/**
+ * Record that the current user has an active session. Called once per
+ * sign-in, after the app shell is up (profile already exists at that point)
+ * — NOT from login() itself, which would race initAuth's own profile-bootstrap
+ * read/create and could leave a brand-new user with an incomplete profile
+ * (no role) if this write landed first.
+ */
+export function recordLogin() {
+  if (currentUser?.uid) dbUpdate(`users/${currentUser.uid}`, { lastLogin: Date.now() }).catch(() => {});
+}
+
+/** Sign the current user out (records the logout time first, best-effort). */
+export async function logout() {
+  if (currentUser?.uid) await dbUpdate(`users/${currentUser.uid}`, { lastLogout: Date.now() }).catch(() => {});
+  return signOut(auth);
+}
 
 /** Whether the current user can perform `action` (see CAPABILITIES). */
 export function can(action) {

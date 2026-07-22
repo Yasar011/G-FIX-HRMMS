@@ -4,7 +4,7 @@
 import { isConfigPlaceholder } from "./lib/firebase.js";
 import {
   initAuth, login, register, logout, currentUser, roleLabel, canonicalRole,
-  recheckVerification, resendVerification,
+  recheckVerification, resendVerification, recordLogin,
 } from "./lib/auth.js";
 import { initTheme, toast, modal } from "./lib/ui.js";
 import { initRouter, route, buildSidebar } from "./router.js";
@@ -13,6 +13,23 @@ import { watch } from "./lib/store.js";
 import { el, esc, initials, debounce } from "./lib/utils.js";
 
 const $ = (id) => document.getElementById(id);
+
+/* ---------------- Idle auto-logout (30 min of inactivity) ---------------- */
+const IDLE_LIMIT_MS = 30 * 60 * 1000;
+let idleTimer = null;
+
+function resetIdleTimer() {
+  if (!shellReady) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    toast("You were signed out after 30 minutes of inactivity", "warn", 6000);
+    await logout();
+    location.hash = "";
+  }, IDLE_LIMIT_MS);
+}
+
+["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"].forEach((evt) =>
+  document.addEventListener(evt, resetIdleTimer, { passive: true }));
 
 initTheme();
 initRouter();
@@ -39,6 +56,7 @@ function onAuthChanged(user, errorMessage) {
   $("loading-screen").classList.add("hidden");
   if (!user) {
     shellReady = false;
+    clearTimeout(idleTimer);
     showGateScreen("login-screen");
     if (errorMessage) {
       const errBox = $("login-error");
@@ -77,6 +95,8 @@ function onAuthChanged(user, errorMessage) {
 
   if (!shellReady) {
     shellReady = true;
+    recordLogin();
+    resetIdleTimer();
     initNotifications();
     initGlobalSearch();
     // Email automation heartbeat (lazy — EmailJS may not be configured yet).

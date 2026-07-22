@@ -80,6 +80,16 @@ export async function render(root) {
           exportVal: (r) => r.createdAt ? new Date(r.createdAt).toISOString() : "",
         },
         {
+          key: "lastLogin", label: "Last Login",
+          render: (r) => r.lastLogin ? timeAgo(r.lastLogin) : "—",
+          exportVal: (r) => r.lastLogin ? new Date(r.lastLogin).toISOString() : "",
+        },
+        {
+          key: "lastLogout", label: "Last Logout",
+          render: (r) => r.lastLogout ? timeAgo(r.lastLogout) : "—",
+          exportVal: (r) => r.lastLogout ? new Date(r.lastLogout).toISOString() : "",
+        },
+        {
           key: "_act", label: "Actions", exportVal: () => "",
           render: (r) => el("div", { style: { display: "flex", gap: "6px" } },
             el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); editUser(r); } }, "✏️ Edit role"),
