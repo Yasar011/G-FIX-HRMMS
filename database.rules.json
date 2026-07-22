@@ -48,6 +48,11 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
+    "employeeRecords": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
+    },
+
     "leaves": {
       ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       "$empId": {

@@ -5,19 +5,23 @@
  * Route: #/employees            → register table
  *        #/employees/{empId}    → profile page
  */
-import { pageWatch, dbSet, dbUpdate, dbRemove } from "../lib/store.js";
+import { pageWatch, dbSet, dbUpdate, dbRemove, dbPush } from "../lib/store.js";
 import { storage, sRef, uploadBytes, getDownloadURL } from "../lib/firebase.js";
-import { can } from "../lib/auth.js";
+import { can, currentUser } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge, statusTone, emptyState } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
 import { filterBar, allOptions } from "../components/filters.js";
 import { statRow } from "../components/kpi.js";
 import { notify } from "../lib/notify.js";
 import {
-  el, esc, fmtDate, fmtNum, fmtPct, initials, uniq, ym, ymd, yearsSince, minToHm,
+  el, esc, fmtDate, fmtNum, fmtPct, initials, uniq, ym, ymd, yearsSince, minToHm, toList, today,
 } from "../lib/utils.js";
 import { empList, activeEmps, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
 import { exportXLSX, exportPDF } from "../lib/export.js";
+
+/** Record types for the employee history log (warnings, promotions, etc). */
+const RECORD_TYPES = ["Warning", "Promotion", "Action", "Document", "Other"];
+const RECORD_TONE = { Warning: "bad", Promotion: "ok", Action: "warn", Document: "info", Other: "dim" };
 
 const FIELDS = [
   { id: "id", label: "Employee ID", required: true },
@@ -130,12 +134,17 @@ function renderProfile(root, empId) {
   const canEdit = can("manage_employees");
   let emp = null;
   let attendance = {};
+  let records = [];
   let month = ym();
   const body = el("div", { class: "page" });
   root.append(body);
 
   pageWatch("attendance", (v) => { attendance = v || {}; draw(); });
   pageWatch(`employees/${empId}`, (v) => { emp = v; draw(); });
+  pageWatch(`employeeRecords/${empId}`, (v) => {
+    records = toList(v, "_key").sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.addedAt || 0) - (a.addedAt || 0));
+    draw();
+  });
 
   function draw() {
     if (!emp) {
@@ -224,7 +233,77 @@ function renderProfile(root, empId) {
                   el("td", {}, minToHm(r.workMin)),
                   el("td", {}, String(r.otHours || 0)),
                   el("td", {}, [r.late && "⏰ Late", r.earlyOut && "🚪 Early"].filter(Boolean).join(" ") || "—"))))))
-          : emptyState("🗓️", "No attendance records this month")));
+          : emptyState("🗓️", "No attendance records this month")),
+
+      recordsCard());
+  }
+
+  /** Warnings / promotions / actions / documents log for this employee. */
+  function recordsCard() {
+    return el("div", { class: "card" },
+      el("div", { class: "card-head" },
+        el("h4", {}, "📋 Records & Remarks"),
+        el("div", { class: "spacer" }),
+        canEdit ? el("button", { class: "btn btn-sm btn-primary", onclick: () => addRecordModal() }, "＋ Add Record") : null),
+      records.length
+        ? el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
+            ...records.map((r) => el("div", { class: "stat-row", style: { alignItems: "flex-start", flexWrap: "wrap", gap: "10px", padding: "10px 0", borderBottom: "1px solid var(--line)" } },
+              el("div", { style: { flex: 1, minWidth: "220px" } },
+                el("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" } },
+                  badge(r.type || "Other", RECORD_TONE[r.type] || "dim"),
+                  el("strong", {}, r.title || "—"),
+                  r.certificateId ? el("span", { class: "chip" }, `Cert: ${r.certificateId}`) : null),
+                r.details ? el("p", { class: "muted", style: { fontSize: "13px", margin: 0 } }, r.details) : null,
+                el("small", { class: "muted" }, `${fmtDate(r.date)}${r.addedBy ? " · by " + r.addedBy : ""}`)),
+              canEdit ? el("button", { class: "btn btn-sm btn-ghost", onclick: () => deleteRecord(r._key) }, "🗑") : null)))
+        : emptyState("📋", "No records yet", canEdit ? "Add a warning, promotion, action, document or other remark." : "Nothing on file."));
+  }
+
+  /** Add a warning / promotion / action / document / other remark for this employee. */
+  function addRecordModal() {
+    const typeSel = el("select", {}, ...RECORD_TYPES.map((t) => el("option", { value: t }, t)));
+    const titleI = el("input", { type: "text", placeholder: "Short title, e.g. \"Late attendance warning\"" });
+    const dateI = el("input", { type: "date", value: today() });
+    const certI = el("input", { type: "text", placeholder: "Optional — e.g. training certificate ID" });
+    const detailsI = el("textarea", { rows: "4", placeholder: "Optional details" });
+
+    modal({
+      title: `Add Record — ${emp.name}`,
+      width: "560px",
+      body: el("div", { class: "form-grid" },
+        el("label", { class: "field" }, el("span", {}, "Type"), typeSel),
+        el("label", { class: "field" }, el("span", {}, "Title *"), titleI),
+        el("label", { class: "field" }, el("span", {}, "Date"), dateI),
+        el("label", { class: "field" }, el("span", {}, "Certificate ID"), certI),
+        el("label", { class: "field" }, el("span", {}, "Details"), detailsI)),
+      actions: [
+        { label: "Cancel", class: "btn-ghost", onClick: () => {} },
+        {
+          label: "Save", class: "btn-primary",
+          onClick: async (e, close) => {
+            if (!titleI.value.trim()) { toast("Enter a title", "warn"); return true; }
+            await dbPush(`employeeRecords/${empId}`, {
+              type: typeSel.value,
+              title: titleI.value.trim(),
+              date: dateI.value || today(),
+              certificateId: certI.value.trim() || null,
+              details: detailsI.value.trim() || null,
+              addedBy: currentUser?.name || "—",
+              addedAt: Date.now(),
+            });
+            toast("Record added", "ok");
+            close();
+          },
+        },
+      ],
+    });
+  }
+
+  /** Delete a record after confirmation. */
+  async function deleteRecord(key) {
+    if (!(await confirmDialog("Delete this record? This cannot be undone."))) return;
+    await dbRemove(`employeeRecords/${empId}/${key}`);
+    toast("Record deleted", "ok");
   }
 
   /** Approved leave days taken this calendar year (rough balance calc). */
@@ -257,6 +336,17 @@ function renderProfile(root, empId) {
         "OT Hrs":   String(r.otHours || 0),
         Flags:      [r.late && "Late", r.earlyOut && "Early Out"].filter(Boolean).join(", ") || "—",
       }));
+
+    // records summary (warnings / promotions / actions / documents / other)
+    const recordCounts = RECORD_TYPES.map((t) => ({ type: t, count: records.filter((r) => (r.type || "Other") === t).length }));
+    const recordRows = records.slice().sort((x, y) => (x.date || "").localeCompare(y.date || "")).map((r) => ({
+      Date:       fmtDate(r.date),
+      Type:       r.type || "Other",
+      Title:      r.title || "—",
+      "Certificate ID": r.certificateId || "—",
+      Details:    r.details || "—",
+      "Added By": r.addedBy || "—",
+    }));
 
     /* ═══ EXCEL ════════════════════════════════════════════════════════ */
     if (format === "xlsx") {
@@ -310,6 +400,19 @@ function renderProfile(root, empId) {
       const ws3 = XLSX.utils.json_to_sheet(logRows.length ? logRows : [{ Date: "No records for this month" }]);
       ws3["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 8 }, { wch: 18 }];
       XLSX.utils.book_append_sheet(wb, ws3, "Daily Log");
+
+      // Sheet 4 — Records (warnings, promotions, actions, documents, other) + summary
+      const recAOA = [
+        ["EMPLOYEE RECORDS", ""],
+        ["Summary", ""],
+        ...recordCounts.map((c) => [c.type, c.count]),
+        ["Total", records.length],
+        [],
+      ];
+      const ws4 = XLSX.utils.aoa_to_sheet(recAOA);
+      XLSX.utils.sheet_add_json(ws4, recordRows.length ? recordRows : [{ Date: "No records on file" }], { origin: -1, skipHeader: false });
+      ws4["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 26 }, { wch: 16 }, { wch: 36 }, { wch: 16 }];
+      XLSX.utils.book_append_sheet(wb, ws4, "Records");
 
       XLSX.writeFile(wb, `${fn}.xlsx`);
       toast("Excel report downloaded", "ok");
@@ -482,6 +585,55 @@ function renderProfile(root, empId) {
         hr(Y + 17); Y += 17;
       });
     }
+
+    // ──────────────────── EMPLOYEE RECORDS ─────────────────
+    if (Y > ph - 90) { footer(); doc.addPage(); Y = 40; }
+    Y += 8;
+    Y = secHead("EMPLOYEE RECORDS  —  WARNINGS / PROMOTIONS / ACTIONS / DOCUMENTS", Y);
+    Y += 7;
+    const RW = CW / recordCounts.length;
+    recordCounts.forEach((c, i) => {
+      const rx = ML + i * RW;
+      drawRect(rx, Y, RW - 4, 32, [244, 246, 253]);
+      txt(String(c.count), rx + (RW - 4) / 2, Y + 16, 13, DARK, true, "center");
+      txt(c.type, rx + (RW - 4) / 2, Y + 27, 7, MID, false, "center");
+    });
+    Y += 40;
+
+    const RCols = [
+      { h: "Date",     w: 60 },
+      { h: "Type",     w: 62 },
+      { h: "Title",    w: 130 },
+      { h: "Cert ID",  w: 70 },
+      { h: "Details",  w: CW - 322 },
+    ];
+    cx = ML;
+    drawRect(ML, Y, CW, 17, MID);
+    RCols.forEach((c) => { txt(c.h, cx + 4, Y + 12, 8, WHITE, true); cx += c.w; });
+    Y += 17;
+
+    if (!recordRows.length) {
+      drawRect(ML, Y, CW, 28, [248, 249, 255]);
+      txt("No records on file.", ML + CW / 2, Y + 18, 9, MID, false, "center");
+      Y += 28;
+    } else {
+      recordRows.forEach((row, idx) => {
+        if (Y > ph - 55) { footer(); doc.addPage(); Y = 40;
+          cx = ML; drawRect(ML, Y, CW, 17, MID);
+          RCols.forEach((c) => { txt(c.h, cx + 4, Y + 12, 8, WHITE, true); cx += c.w; }); Y += 17;
+        }
+        if (idx % 2 === 0) drawRect(ML, Y, CW, 17, [247, 248, 255]);
+        const vals = [row["Date"], row["Type"], row["Title"], row["Certificate ID"], row["Details"]];
+        cx = ML;
+        RCols.forEach((c, ci) => {
+          const col = ci === 1 && vals[ci] === "Warning" ? BAD : ci === 1 && vals[ci] === "Promotion" ? OK : DARK;
+          txt(vals[ci] ?? "—", cx + 4, Y + 12, 8, col, ci === 1, "left", c.w - 6);
+          cx += c.w;
+        });
+        hr(Y + 17); Y += 17;
+      });
+    }
+
     footer();
     doc.save(`${fn}.pdf`);
     toast("PDF downloaded", "ok");
