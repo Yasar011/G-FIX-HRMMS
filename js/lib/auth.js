@@ -26,6 +26,7 @@ export const ROLES = {
   hr_executive: "HR Executive",
   dept_manager: "Department Manager",
   management: "Management",
+  employee: "Employee",
 };
 
 /**
@@ -45,6 +46,7 @@ const CAPABILITIES = {
   manage_settings: ["hr_admin"],
   manage_users: ["hr_admin"],
   seed_data: ["hr_admin"],
+  view_self_service: ["employee", "hr_admin", "hr_executive", "dept_manager", "management"],
 };
 
 /**
@@ -56,6 +58,7 @@ const LEGACY_ROLES = {
   editor: "hr_executive", executive: "hr_executive",
   viewer: "management", user: "management",
   manager: "dept_manager",
+  staff: "employee", worker: "employee"
 };
 
 /** Resolve any stored role string to one of the four canonical roles. */

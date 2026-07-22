@@ -75,7 +75,7 @@ function parseSimpleAttendance(raw, settings = {}) {
     const empId = String(rec.empId ?? "").trim();
     let date = rec.date;
     if (date instanceof Date) date = ymd(date);
-    else if (typeof date === "number") date = ymd(new Date(Math.round((date - 25569) * 86400e3))); // Excel serial
+    else if (typeof date === "number") date = ymd(new Date(Math.round((date - 25569) * 86400e3) + 43200e3)); // Excel serial + 12h offset
     else date = String(date || "").trim().replace(/\//g, "-");
     if (/^\d{2}-\d{2}-\d{4}$/.test(date)) date = date.split("-").reverse().join("-"); // DD-MM-YYYY
 

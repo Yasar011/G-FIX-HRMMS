@@ -81,7 +81,11 @@ export function dataTable({
 
   function applyFilter() {
     filtered = !q ? all : all.filter((r) =>
-      columns.some((c) => String((c.exportVal ? c.exportVal(r) : r[c.key]) ?? "").toLowerCase().includes(q)));
+      columns.some((c) => {
+        // searchVal overrides exportVal/key for full-text search (e.g. include emp ID in name column)
+        const v = c.searchVal ? c.searchVal(r) : (c.exportVal ? c.exportVal(r) : r[c.key]);
+        return String(v ?? "").toLowerCase().includes(q);
+      }));
     page = 0;
     applySort();
     render();

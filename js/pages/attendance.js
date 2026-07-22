@@ -24,7 +24,7 @@ import { parseAttendanceWorkbook, importAttendance } from "../lib/importers.js";
 import {
   el, ym, today, fmtDate, fmtNum, fmtPct, minToHm, uniq, toList, timeAgo, addDays, dateRange,
 } from "../lib/utils.js";
-import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
+import { empList, activeEmps, dayStats, employeeAttendance, monthDates, ATT_STATUS, groupAttendance, groupAttendanceByShift } from "../lib/metrics.js";
 
 const C = { ok: "#34d399", warn: "#fbbf24", bad: "#f87171", info: "#38bdf8", brand: "#6366f1", violet: "#a78bfa" };
 
@@ -32,17 +32,27 @@ export async function render(root) {
   let employees = [];
   let attendance = {};
   let settings = {};
-  let view = { date: today(), month: ym(), from: `${ym()}-01`, to: today(), dept: "", shift: "", tab: "daily", rowFilter: null };
+  let view = { date: today(), month: ym(), from: `${ym()}-01`, to: today(), dept: "", category: "", shift: "", tab: "daily", rowFilter: null };
 
   /* ---------- header + upload ---------- */
   const uploadBtn = can("upload_attendance")
     ? el("button", { class: "btn btn-primary", onclick: () => openUpload() }, "⬆ Upload Excel")
     : null;
 
+  function updateFilterVisibility() {
+    filters.querySelectorAll(".field").forEach(f => {
+      const span = f.querySelector("span").textContent;
+      if (span === "Date") f.style.display = (view.tab === "daily" || view.tab === "weekly") ? "" : "none";
+      if (span === "Month") f.style.display = view.tab === "monthly" ? "" : "none";
+      if (span === "From" || span === "To") f.style.display = view.tab === "range" ? "" : "none";
+    });
+  }
+
   /** Switch to a tab (used by both the tab buttons and KPI-tile clicks). */
   function switchTab(id) {
     view.tab = id;
     tabs.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === id));
+    updateFilterVisibility();
     refresh();
   }
   /** Jump to Daily View filtered to one status/flag — the KPI tiles drill into this. */
@@ -82,8 +92,9 @@ export async function render(root) {
     { id: "from", label: "From", type: "date", value: view.from },
     { id: "to", label: "To", type: "date", value: view.to },
     { id: "dept", label: "Department", type: "select", options: allOptions([]) },
+    { id: "category", label: "Category", type: "select", options: allOptions([]) },
     { id: "shift", label: "Shift", type: "select", options: allOptions([]) },
-  ], (v) => { Object.assign(view, { date: v.date, month: v.month, from: v.from, to: v.to, dept: v.dept, shift: v.shift }); refresh(); });
+  ], (v) => { Object.assign(view, { date: v.date, month: v.month, from: v.from, to: v.to, dept: v.dept, category: v.category, shift: v.shift }); refresh(); });
 
   const avgHost = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", margin: "4px 0 12px" } });
   const filterHost = el("div");
@@ -94,6 +105,8 @@ export async function render(root) {
     kpis, tabs, filters, avgHost, filterHost, tableHost,
     el("div", { class: "section-label" }, "Upload History"),
     uploadsHost);
+
+  switchTab(view.tab);
 
   /** Show/hide the "drilled into <status> — Clear" banner above the Daily table. */
   function showFilterBanner(label) {
@@ -119,9 +132,6 @@ export async function render(root) {
   });
   pageWatch("attendance", (v) => {
     attendance = v || {};
-    const shifts = new Set();
-    for (const day of Object.values(attendance)) for (const r of Object.values(day)) if (r.shift) shifts.add(r.shift);
-    filters._setOptions("shift", allOptions([...shifts].sort()));
     refresh();
   });
 
@@ -154,7 +164,25 @@ export async function render(root) {
       return;
     }
     if (view.tab !== "daily") { filterHost.replaceChildren(); view.rowFilter = null; }
-    const scoped = view.dept ? employees.filter((e) => e.department === view.dept) : employees;
+    
+    let scoped = employees;
+    if (view.dept) scoped = scoped.filter((e) => e.department === view.dept);
+    
+    filters._setOptions("category", allOptions(uniq(scoped, e => e.category)));
+    view.category = filters._values().category;
+
+    const shifts = new Set();
+    const deptEmpIds = new Set(scoped.map(e => e.id));
+    for (const day of Object.values(attendance)) {
+      for (const [id, r] of Object.entries(day)) {
+        if (r.shift && deptEmpIds.has(id)) shifts.add(r.shift);
+      }
+    }
+    filters._setOptions("shift", allOptions([...shifts].sort()));
+    view.shift = filters._values().shift;
+
+    if (view.category) scoped = scoped.filter(e => e.category === view.category);
+
     if (view.tab === "daily") renderDaily(scoped);
     else if (view.tab === "weekly") renderWeekly(scoped);
     else if (view.tab === "range") renderRange(scoped);
@@ -165,13 +193,13 @@ export async function render(root) {
     const dayObj = attendance[view.date] || {};
     const byId = Object.fromEntries(scoped.map((e) => [e.id, e]));
     let rows = Object.entries(dayObj)
-      .filter(([id]) => byId[id] || (!view.dept))
+      .filter(([id]) => byId[id])
       .map(([id, r]) => ({
         empId: id,
-        name: byId[id]?.name || r.name || id,
-        department: byId[id]?.department || "—",
-        category: byId[id]?.category || "—",
-        section: byId[id]?.section || "—",
+        name: byId[id].name,
+        department: byId[id].department || "—",
+        category: byId[id].category || "—",
+        section: byId[id].section || "—",
         shift: r.shift || "—",
         status: r.status,
         in: r.in || "—", out: r.out || "—",
@@ -179,8 +207,12 @@ export async function render(root) {
         otHours: Number(r.otHours) || 0,
         late: r.late ? "Yes" : "", earlyOut: r.earlyOut ? "Yes" : "",
       }));
-    if (view.dept) rows = rows.filter((r) => byId[r.empId]);
-    if (view.shift) rows = rows.filter((r) => r.shift === view.shift);
+      
+    if (view.shift) {
+      rows = rows.filter((r) => r.shift === view.shift);
+      const shiftEmpIds = new Set(rows.map(r => r.empId));
+      scoped = scoped.filter(e => shiftEmpIds.has(e.id));
+    }
 
     // Scope the KPI tiles to exactly the same set of rows the table shows —
     // otherwise changing the Department/Shift filter leaves the tiles above unchanged.
@@ -197,11 +229,16 @@ export async function render(root) {
     // A KPI-tile click drills the TABLE (not the totals above) into one status/flag.
     const tableRows = view.rowFilter ? rows.filter((r) => r[view.rowFilter.key] === view.rowFilter.value) : rows;
 
+    const byCategory = groupAttendance({ [view.date]: scopedDayObj }, scoped, [view.date], "category");
+    const byShift = groupAttendanceByShift({ [view.date]: scopedDayObj }, scoped, [view.date]);
+
     const summary = [
       { label: "Present", value: stats.present }, { label: "Absent", value: stats.absent },
       { label: "Leave", value: stats.leave }, { label: "Half Day", value: stats.halfDay },
       { label: "Marked", value: stats.marked },
       { label: "Attendance %", value: fmtPct(stats.attendancePct) },
+      ...byCategory.filter(c => ["Direct", "Indirect"].includes(c.name)).map(c => ({ label: `Att (${c.name})`, value: fmtPct(c.attendancePct) })),
+      ...byShift.map(s => ({ label: `Att (Shift ${s.shift})`, value: fmtPct(s.attendancePct) })),
       { label: "Avg Work Hrs", value: fmtNum(stats.avgWorkMin / 60, 1) },
       { label: "Total OT Hrs", value: fmtNum(stats.otHours, 1) },
       { label: "Avg OT/Present", value: fmtNum(stats.present ? stats.otHours / stats.present : 0, 2) },
@@ -276,7 +313,7 @@ export async function render(root) {
   /** Shared per-employee summary table (weekly/monthly) with Category column + averages. */
   function renderSummary(scoped, dates, opts) {
     const rows = activeEmps(scoped).map((e) => {
-      const a = employeeAttendance(e.id, attendance, dates);
+      const a = employeeAttendance(e.id, attendance, dates, { shift: view.shift });
       return {
         empId: e.id, name: e.name, department: e.department || "—", category: e.category || "—",
         present: a.present, absent: a.absent, leave: a.leave, late: a.late,
@@ -303,12 +340,22 @@ export async function render(root) {
       ot: totOt,
     });
 
+    const byCategory = groupAttendance(attendance, scoped, dates, "category", { shift: view.shift });
+    const byShift = groupAttendanceByShift(attendance, scoped, dates);
+    // If we filtered by shift, byShift will still compute correctly because it groups the raw records. 
+    // We only want to show the selected shift if filtered, or all if not.
+    const shiftChips = view.shift 
+      ? byShift.filter(s => s.shift === view.shift) 
+      : byShift;
+
     const summary = [
       { label: "Employees", value: rows.length },
       { label: "Present", value: totPresent },
       { label: "Absent", value: rows.reduce((s, r) => s + r.absent, 0) },
       { label: "Leave", value: rows.reduce((s, r) => s + r.leave, 0) },
       { label: "Avg Attendance %", value: fmtPct(avgAtt) },
+      ...byCategory.filter(c => ["Direct", "Indirect"].includes(c.name)).map(c => ({ label: `Att (${c.name})`, value: fmtPct(c.attendancePct) })),
+      ...shiftChips.map(s => ({ label: `Att (Shift ${s.shift})`, value: fmtPct(s.attendancePct) })),
       { label: "Avg Work Hrs", value: fmtNum(avgWork, 1) },
       { label: "Total OT Hrs", value: fmtNum(totOt, 1) },
       { label: "Avg OT/Employee", value: fmtNum(rows.length ? totOt / rows.length : 0, 1) },

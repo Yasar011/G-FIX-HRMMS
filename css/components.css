@@ -8,7 +8,11 @@
   background: var(--glass-bg); border: 1px solid var(--glass-border);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 18px;
-  transition: transform var(--t-fast), box-shadow var(--t-fast);
+  transition: transform var(--t-fast), box-shadow var(--t-fast), border-color var(--t-fast);
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 42px rgba(0,0,0,.5);
 }
 .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .card-head h4 { font-size: 14.5px; }

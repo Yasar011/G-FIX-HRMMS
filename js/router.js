@@ -5,7 +5,7 @@
  * Role guards come from the capability matrix in lib/auth.js. On navigation the
  * previous page's realtime subscriptions are disposed via store.disposePage().
  */
-import { can, currentUser } from "./lib/auth.js";
+import { can, currentUser, canonicalRole } from "./lib/auth.js";
 import { disposePage } from "./lib/store.js";
 import { el } from "./lib/utils.js";
 import { emptyState } from "./lib/ui.js";
@@ -18,23 +18,25 @@ import { track } from "./lib/firebase.js";
  * flat list of 17 items.
  */
 export const PAGES = [
-  { id: "dashboard", title: "Dashboard", icon: "🏠", cap: null, group: "Overview", mod: () => import("./pages/dashboard.js") },
-  { id: "attendance", title: "Attendance", icon: "🗓️", cap: null, group: "Attendance & Data", mod: () => import("./pages/attendance.js") },
-  { id: "uploads", title: "Data Upload", icon: "⬆️", cap: "upload_attendance", group: "Attendance & Data", mod: () => import("./pages/uploads.js") },
-  { id: "employees", title: "Employees", icon: "👥", cap: null, group: "People", mod: () => import("./pages/employees.js") },
-  { id: "departments", title: "Departments", icon: "🏭", cap: null, group: "People", mod: () => import("./pages/departments.js") },
-  { id: "budget", title: "Budget", icon: "💰", cap: null, group: "Planning", mod: () => import("./pages/budget.js") },
-  { id: "recruitment", title: "Recruitment", icon: "🧲", cap: null, group: "Planning", mod: () => import("./pages/recruitment.js") },
-  { id: "leaves", title: "Leaves", icon: "🌴", cap: null, group: "HR Operations", mod: () => import("./pages/leaves.js") },
-  { id: "overtime", title: "Overtime", icon: "⏱️", cap: null, group: "HR Operations", mod: () => import("./pages/overtime.js") },
-  { id: "attrition", title: "Attrition", icon: "📉", cap: null, group: "HR Operations", mod: () => import("./pages/attrition.js") },
-  { id: "performance", title: "Performance", icon: "🚀", cap: null, group: "HR Operations", mod: () => import("./pages/performance.js") },
-  { id: "reports", title: "Reports", icon: "📄", cap: "view_reports", group: "Insights", mod: () => import("./pages/reports.js") },
-  { id: "email", title: "Email Automation", icon: "✉️", cap: "send_email", group: "Insights", mod: () => import("./pages/email.js") },
-  { id: "notifications", title: "Notifications", icon: "🔔", cap: null, group: "Insights", mod: () => import("./pages/notifications.js") },
-  { id: "analytics", title: "Analytics", icon: "📈", cap: null, group: "Insights", mod: () => import("./pages/analytics.js") },
-  { id: "settings", title: "Settings", icon: "⚙️", cap: "manage_settings", group: "Admin", mod: () => import("./pages/settings.js") },
-  { id: "profile", title: "Profile", icon: "👤", cap: null, group: "Admin", mod: () => import("./pages/profile.js") },
+  { id: "dashboard",    title: "Dashboard",       icon: "🏠",  cap: "view_dashboard",      group: "Overview",         mod: () => import("./pages/dashboard.js") },
+  { id: "attendance",  title: "Attendance",       icon: "🗓️", cap: "view_dashboard",      group: "Attendance & Data", mod: () => import("./pages/attendance.js") },
+  { id: "uploads",     title: "Data Upload",      icon: "⬆️",  cap: "upload_attendance",   group: "Attendance & Data", mod: () => import("./pages/uploads.js") },
+  { id: "employees",   title: "Employees",        icon: "👥",  cap: "view_dashboard",      group: "People",           mod: () => import("./pages/employees.js") },
+  { id: "departments", title: "Departments",      icon: "🏭",  cap: "view_dashboard",      group: "People",           mod: () => import("./pages/departments.js") },
+  { id: "budget",      title: "Budget",           icon: "💰",  cap: "view_dashboard",      group: "Planning",         mod: () => import("./pages/budget.js") },
+  { id: "recruitment", title: "Recruitment",      icon: "🧲",  cap: "view_dashboard",      group: "Planning",         mod: () => import("./pages/recruitment.js") },
+  { id: "leaves",      title: "Leaves",           icon: "🌴",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/leaves.js") },
+  { id: "overtime",    title: "Overtime",         icon: "⏱️",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/overtime.js") },
+  { id: "attrition",   title: "Attrition",        icon: "📉",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/attrition.js") },
+  { id: "performance", title: "Performance",      icon: "🚀",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/performance.js") },
+  { id: "reports",     title: "Reports",          icon: "📄",  cap: "view_reports",        group: "Insights",         mod: () => import("./pages/reports.js") },
+  { id: "email",       title: "Email Automation", icon: "✉️",  cap: "send_email",          group: "Insights",         mod: () => import("./pages/email.js") },
+  { id: "notifications",title:"Notifications",   icon: "🔔",  cap: "view_dashboard",      group: "Insights",         mod: () => import("./pages/notifications.js") },
+  { id: "analytics",   title: "Analytics",        icon: "📈",  cap: "view_dashboard",      group: "Insights",         mod: () => import("./pages/analytics.js") },
+  { id: "id_card",     title: "ID Card Generator",icon: "🪖",  cap: "view_dashboard",      group: "Tools",            mod: () => import("./pages/id_card.js") },
+  { id: "users",       title: "Users & Roles",    icon: "🔐",  cap: "manage_users",        group: "Admin",            mod: () => import("./pages/users.js") },
+  { id: "settings",    title: "Settings",         icon: "⚙️",  cap: "manage_settings",     group: "Admin",            mod: () => import("./pages/settings.js") },
+  { id: "profile",     title: "Profile",          icon: "👤",  cap: null,                  group: "Admin",            mod: () => import("./pages/profile.js") },
 ];
 
 let current = null;
@@ -62,8 +64,19 @@ export function buildSidebar() {
 /** Navigate to the page named in the current hash. */
 export async function route() {
   if (!currentUser) return;
-  const [, id = "dashboard", ...rest] = location.hash.split("/");
-  const page = PAGES.find((p) => p.id === id) || PAGES[0];
+
+  // Parse the hash safely: "#/departments/Sewing" → id="departments", params=["Sewing"]
+  const rawHash = location.hash || "";
+  const segments = rawHash.replace(/^#\//, "").split("/");
+  const id = segments[0] || "";
+  const params = segments.slice(1); // sub-path params passed to render()
+  const def = canonicalRole(currentUser.role) === "employee" ? "my_portal" : "dashboard";
+
+  // Find the matching page or fall back to default
+  const page = (id ? PAGES.find((p) => p.id === id) : null)
+    || PAGES.find((p) => p.id === def)
+    || PAGES[0];
+
   const container = document.getElementById("page-container");
 
   // Guard
@@ -76,7 +89,7 @@ export async function route() {
   document.querySelectorAll(".nav-item[data-page]").forEach((n) =>
     n.classList.toggle("active", n.dataset.page === page.id));
   document.getElementById("page-title").textContent = page.title;
-  document.querySelector(".app")?.classList.remove("sidebar-open"); // close mobile drawer
+  document.querySelector(".app")?.classList.remove("sidebar-open");
 
   // Dispose previous page's listeners, then render
   disposePage();
@@ -86,10 +99,10 @@ export async function route() {
     el("div", { class: "skeleton", style: { height: "300px" } })));
   try {
     const mod = await page.mod();
-    if (current !== page.id) return; // user navigated away while loading
+    if (current !== page.id) return;
     const root = el("div", { class: "page" });
     container.replaceChildren(root);
-    await mod.render(root, rest);
+    await mod.render(root, params);
     track("page_view", { page: page.id });
   } catch (e) {
     console.error(`Failed to render page "${page.id}"`, e);

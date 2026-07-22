@@ -38,19 +38,19 @@
 /* ----- Dark (default) ----- */
 :root, [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0e17;
-  --bg-grad: radial-gradient(1200px 800px at 80% -10%, rgba(99, 102, 241, .18), transparent 60%),
-             radial-gradient(1000px 700px at -10% 110%, rgba(217, 70, 239, .12), transparent 60%),
-             #0b0e17;
-  --surface: rgba(255, 255, 255, .045);
-  --surface-2: rgba(255, 255, 255, .08);
-  --glass-bg: rgba(17, 21, 38, .62);
-  --glass-border: rgba(255, 255, 255, .09);
-  --glass-blur: 18px;
+  --bg: #06080F;
+  --bg-grad: radial-gradient(1200px 800px at 80% -10%, rgba(99, 102, 241, .15), transparent 60%),
+             radial-gradient(1000px 700px at -10% 110%, rgba(217, 70, 239, .10), transparent 60%),
+             #06080F;
+  --surface: rgba(255, 255, 255, .035);
+  --surface-2: rgba(255, 255, 255, .07);
+  --glass-bg: rgba(6, 8, 15, .75);
+  --glass-border: rgba(255, 255, 255, .06);
+  --glass-blur: 24px;
   --text: #e7e9f2;
   --text-dim: #9aa1b5;
-  --line: rgba(255, 255, 255, .08);
-  --shadow: 0 10px 32px rgba(0, 0, 0, .35);
+  --line: rgba(255, 255, 255, .06);
+  --shadow: 0 12px 36px rgba(0, 0, 0, .45);
   --skeleton: linear-gradient(90deg, rgba(255,255,255,.05) 25%, rgba(255,255,255,.12) 37%, rgba(255,255,255,.05) 63%);
 }
 
