@@ -36,6 +36,10 @@ export const ATT_STATUS = {
 /** Statuses that count toward "worked / present" attendance %. */
 const PRESENT_LIKE = new Set(["P", "HD", "WFH"]);
 
+/** Employee record types (warnings, promotions, etc.) → badge tone. */
+export const RECORD_TYPES = ["Warning", "Promotion", "Action", "Document", "Other"];
+export const RECORD_TONE = { Warning: "bad", Promotion: "ok", Action: "warn", Document: "info", Other: "dim" };
+
 /* =============== Employee dimension =============== */
 
 /** employees node → array with `id` field. */

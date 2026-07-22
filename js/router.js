@@ -29,6 +29,7 @@ export const PAGES = [
   { id: "overtime",    title: "Overtime",         icon: "⏱️",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/overtime.js") },
   { id: "attrition",   title: "Attrition",        icon: "📉",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/attrition.js") },
   { id: "performance", title: "Performance",      icon: "🚀",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/performance.js") },
+  { id: "records",     title: "Records",          icon: "📋",  cap: "view_dashboard",      group: "HR Operations",    mod: () => import("./pages/records.js") },
   { id: "reports",     title: "Reports",          icon: "📄",  cap: "view_reports",        group: "Insights",         mod: () => import("./pages/reports.js") },
   { id: "email",       title: "Email Automation", icon: "✉️",  cap: "send_email",          group: "Insights",         mod: () => import("./pages/email.js") },
   { id: "notifications",title:"Notifications",   icon: "🔔",  cap: "view_dashboard",      group: "Insights",         mod: () => import("./pages/notifications.js") },

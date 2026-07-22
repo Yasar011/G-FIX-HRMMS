@@ -16,12 +16,8 @@ import { notify } from "../lib/notify.js";
 import {
   el, esc, fmtDate, fmtNum, fmtPct, initials, uniq, ym, ymd, yearsSince, minToHm, toList, today,
 } from "../lib/utils.js";
-import { empList, activeEmps, employeeAttendance, monthDates, ATT_STATUS } from "../lib/metrics.js";
+import { empList, activeEmps, employeeAttendance, monthDates, ATT_STATUS, RECORD_TYPES, RECORD_TONE } from "../lib/metrics.js";
 import { exportXLSX, exportPDF } from "../lib/export.js";
-
-/** Record types for the employee history log (warnings, promotions, etc). */
-const RECORD_TYPES = ["Warning", "Promotion", "Action", "Document", "Other"];
-const RECORD_TONE = { Warning: "bad", Promotion: "ok", Action: "warn", Document: "info", Other: "dim" };
 
 const FIELDS = [
   { id: "id", label: "Employee ID", required: true },
@@ -244,7 +240,7 @@ function renderProfile(root, empId) {
       el("div", { class: "card-head" },
         el("h4", {}, "📋 Records & Remarks"),
         el("div", { class: "spacer" }),
-        canEdit ? el("button", { class: "btn btn-sm btn-primary", onclick: () => addRecordModal() }, "＋ Add Record") : null),
+        canEdit ? el("button", { class: "btn btn-sm btn-primary", onclick: () => recordModal(null) }, "＋ Add Record") : null),
       records.length
         ? el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } },
             ...records.map((r) => el("div", { class: "stat-row", style: { alignItems: "flex-start", flexWrap: "wrap", gap: "10px", padding: "10px 0", borderBottom: "1px solid var(--line)" } },
@@ -254,21 +250,24 @@ function renderProfile(root, empId) {
                   el("strong", {}, r.title || "—"),
                   r.certificateId ? el("span", { class: "chip" }, `Cert: ${r.certificateId}`) : null),
                 r.details ? el("p", { class: "muted", style: { fontSize: "13px", margin: 0 } }, r.details) : null,
-                el("small", { class: "muted" }, `${fmtDate(r.date)}${r.addedBy ? " · by " + r.addedBy : ""}`)),
-              canEdit ? el("button", { class: "btn btn-sm btn-ghost", onclick: () => deleteRecord(r._key) }, "🗑") : null)))
+                el("small", { class: "muted" }, `${fmtDate(r.date)}${r.addedBy ? " · by " + r.addedBy : ""}${r.editedBy ? " · edited by " + r.editedBy : ""}`)),
+              canEdit ? el("div", { style: { display: "flex", gap: "6px" } },
+                el("button", { class: "btn btn-sm btn-ghost", onclick: () => recordModal(r) }, "✏️"),
+                el("button", { class: "btn btn-sm btn-ghost", onclick: () => deleteRecord(r._key) }, "🗑")) : null)))
         : emptyState("📋", "No records yet", canEdit ? "Add a warning, promotion, action, document or other remark." : "Nothing on file."));
   }
 
-  /** Add a warning / promotion / action / document / other remark for this employee. */
-  function addRecordModal() {
+  /** Add (existing=null) or edit (existing=record) a warning / promotion / action / document / other remark. */
+  function recordModal(existing) {
     const typeSel = el("select", {}, ...RECORD_TYPES.map((t) => el("option", { value: t }, t)));
-    const titleI = el("input", { type: "text", placeholder: "Short title, e.g. \"Late attendance warning\"" });
-    const dateI = el("input", { type: "date", value: today() });
-    const certI = el("input", { type: "text", placeholder: "Optional — e.g. training certificate ID" });
-    const detailsI = el("textarea", { rows: "4", placeholder: "Optional details" });
+    typeSel.value = existing?.type || RECORD_TYPES[0];
+    const titleI = el("input", { type: "text", placeholder: "Short title, e.g. \"Late attendance warning\"", value: existing?.title || "" });
+    const dateI = el("input", { type: "date", value: existing?.date || today() });
+    const certI = el("input", { type: "text", placeholder: "Optional — e.g. training certificate ID", value: existing?.certificateId || "" });
+    const detailsI = el("textarea", { rows: "4", placeholder: "Optional details" }, existing?.details || "");
 
     modal({
-      title: `Add Record — ${emp.name}`,
+      title: existing ? `Edit Record — ${emp.name}` : `Add Record — ${emp.name}`,
       width: "560px",
       body: el("div", { class: "form-grid" },
         el("label", { class: "field" }, el("span", {}, "Type"), typeSel),
@@ -282,16 +281,24 @@ function renderProfile(root, empId) {
           label: "Save", class: "btn-primary",
           onClick: async (e, close) => {
             if (!titleI.value.trim()) { toast("Enter a title", "warn"); return true; }
-            await dbPush(`employeeRecords/${empId}`, {
+            const data = {
               type: typeSel.value,
               title: titleI.value.trim(),
               date: dateI.value || today(),
               certificateId: certI.value.trim() || null,
               details: detailsI.value.trim() || null,
-              addedBy: currentUser?.name || "—",
-              addedAt: Date.now(),
-            });
-            toast("Record added", "ok");
+            };
+            if (existing) {
+              data.editedBy = currentUser?.name || "—";
+              data.editedAt = Date.now();
+              await dbUpdate(`employeeRecords/${empId}/${existing._key}`, data);
+              toast("Record updated", "ok");
+            } else {
+              data.addedBy = currentUser?.name || "—";
+              data.addedAt = Date.now();
+              await dbPush(`employeeRecords/${empId}`, data);
+              toast("Record added", "ok");
+            }
             close();
           },
         },
