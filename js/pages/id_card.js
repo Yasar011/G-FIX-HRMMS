@@ -135,10 +135,7 @@ export async function render(root) {
       .idc-id-row     {
         background:#c8102e; color:#fff; border-radius: 12px;
         padding: 2px 12px; font-size:8px; font-weight:700; letter-spacing:1px;
-        margin-bottom:4px;
       }
-      .idc-meta-line  { font-size:7.5px; color:#555; line-height:1.5; }
-      .idc-phone      { font-size:8px; color:#555; margin-top:2px; }
       .idc-footer     {
         width:100%; background:#c8102e; color:#fff;
         text-align:center; font-size:7px; padding: 4px 0; letter-spacing:1px;
@@ -149,6 +146,13 @@ export async function render(root) {
       .idc-back-qr { padding: 8px; background:#fff; border: 2px solid #c8102e; border-radius: 6px; }
       .idc-back-id { font-size: 10px; font-weight: 800; letter-spacing: 2px; color:#1a1a1a; margin-top: 10px; }
       .idc-back-name { font-size: 8.5px; color:#555; margin-top: 2px; }
+      .idc-back-details {
+        width: 100%; margin-top: 12px; padding: 8px 10px;
+        background: #f7f7f9; border-radius: 6px;
+        display: flex; flex-direction: column; gap: 4px;
+      }
+      .idc-back-detail-row { display: flex; justify-content: space-between; font-size: 8px; color:#333; }
+      .idc-back-detail-label { color:#888; font-weight:700; }
       .idc-back-note { font-size: 7px; color:#777; text-align:center; margin-top: 14px; line-height: 1.5; padding: 0 8px; }
       .idc-back-strip { width:100%; background:#c8102e; color:#fff; text-align:center; font-size:7px; padding: 4px 0; letter-spacing:1px; font-weight:700; }
       /* Photo thumb in form */
@@ -186,17 +190,8 @@ export async function render(root) {
     const name  = nameInput.value.trim()  || "EMPLOYEE NAME";
     const desig = desigInput.value.trim() || "Designation";
     const dept  = deptInput.value.trim()  || "Department";
-    const grade = gradeInput.value.trim() || "";
-    const doj   = dojInput.value          || "";
-    const blood = bloodInput.value.trim() || "";
-    const phone = phoneInput.value.trim() || "";
     const empId = empIdInput.value.trim() || "—";
     const unit  = unitInput.value.trim()  || "Unit 3";
-
-    const metaLines = [
-      [grade && `Grade ${grade}`, blood && `Blood ${blood}`].filter(Boolean).join("   ·   "),
-      doj && `DOJ ${fmtDate(doj)}`,
-    ].filter(Boolean);
 
     cardEl.replaceChildren(
       // ── top header ──────────────────────────────────────────────────
@@ -215,9 +210,7 @@ export async function render(root) {
         el("div", { class: "idc-name"  }, name.toUpperCase()),
         el("div", { class: "idc-desig" }, desig.toUpperCase()),
         el("div", { class: "idc-dept"  }, dept),
-        el("div", { class: "idc-id-row"}, `ID: ${empId}`),
-        ...metaLines.map((l) => el("div", { class: "idc-meta-line" }, l)),
-        phone ? el("div", { class: "idc-phone" }, `📞 ${phone}`) : null),
+        el("div", { class: "idc-id-row"}, `ID: ${empId}`)),
 
       // ── footer stripe ────────────────────────────────────────────────
       el("div", { class: "idc-footer" }, `BRANDIX APPAREL INDIA  ·  ${unit.toUpperCase()}`)
@@ -228,6 +221,17 @@ export async function render(root) {
   function buildBack() {
     const name  = nameInput.value.trim()  || "";
     const empId = empIdInput.value.trim() || "";
+    const grade = gradeInput.value.trim() || "";
+    const doj   = dojInput.value          || "";
+    const blood = bloodInput.value.trim() || "";
+    const phone = phoneInput.value.trim() || "";
+
+    const details = [
+      grade && ["Grade", grade],
+      doj && ["DOJ", fmtDate(doj)],
+      blood && ["Blood", blood],
+      phone && ["Phone", phone],
+    ].filter(Boolean);
 
     const qrHost = el("div", { class: "idc-back-qr" });
     cardEl.replaceChildren(
@@ -235,6 +239,11 @@ export async function render(root) {
         qrHost,
         empId ? el("div", { class: "idc-back-id" }, empId) : null,
         name ? el("div", { class: "idc-back-name" }, name) : null,
+        details.length
+          ? el("div", { class: "idc-back-details" },
+              ...details.map(([label, value]) => el("div", { class: "idc-back-detail-row" },
+                el("span", { class: "idc-back-detail-label" }, label), el("span", {}, value))))
+          : null,
         el("div", { class: "idc-back-note" },
           "If found, please return to Brandix Unit 3 HR Department. This card remains the property of Brandix Apparel India.")),
       el("div", { class: "idc-back-strip" }, "BRANDIX APPAREL INDIA")
