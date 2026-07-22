@@ -7,7 +7,7 @@
  *   - Full users table with role/department editor + password reset
  *   - Create guest / staff login with one click (HR Admin only)
  */
-import { pageWatch, dbUpdate, getCached } from "../lib/store.js";
+import { pageWatch, dbUpdate, dbRemove, getCached } from "../lib/store.js";
 import { can, ROLES, roleLabel, canonicalRole, currentUser, createGuestAccount } from "../lib/auth.js";
 import { toast, modal, confirmDialog, badge } from "../lib/ui.js";
 import { dataTable } from "../components/table.js";
@@ -83,7 +83,10 @@ export async function render(root) {
           key: "_act", label: "Actions", exportVal: () => "",
           render: (r) => el("div", { style: { display: "flex", gap: "6px" } },
             el("button", { class: "btn btn-sm", onclick: (e) => { e.stopPropagation(); editUser(r); } }, "✏️ Edit role"),
-            el("button", { class: "btn btn-sm btn-ghost", onclick: (e) => { e.stopPropagation(); resetPassword(r); } }, "🔑 Reset pw")),
+            el("button", { class: "btn btn-sm btn-ghost", onclick: (e) => { e.stopPropagation(); resetPassword(r); } }, "🔑 Reset pw"),
+            r.uid === currentUser?.uid
+              ? null
+              : el("button", { class: "btn btn-sm btn-danger", onclick: (e) => { e.stopPropagation(); deleteUser(r); } }, "🗑 Delete")),
         },
       ],
       rows: approved,
@@ -110,7 +113,16 @@ function pendingRow(u) {
           await dbUpdate(`users/${u.uid}`, { role: roleSel.value, department: deptInput.value.trim() });
           toast(`${u.name || u.email} approved as ${roleLabel(roleSel.value)}`, "ok");
         },
-      }, "✅ Approve")));
+      }, "✅ Approve"),
+      el("button", {
+        class: "btn btn-sm btn-ghost",
+        onclick: async (e) => {
+          e.stopPropagation();
+          if (!(await confirmDialog(`Reject and delete the sign-up request from ${u.name || u.email}?`))) return;
+          await dbRemove(`users/${u.uid}`);
+          toast("Sign-up rejected", "warn");
+        },
+      }, "✕ Reject")));
 }
 
 /* ─── Create guest / staff login ────────────────────────────────────────── */
@@ -226,4 +238,14 @@ async function resetPassword(user) {
   } catch (e) {
     toast(e?.message || "Could not send reset email", "err");
   }
+}
+
+/* ─── Delete a user account ─────────────────────────────────────────────── */
+async function deleteUser(user) {
+  if (!(await confirmDialog(
+    `Remove ${user.name || user.email}'s access? This deletes their app account record (role/department/permissions). ` +
+    `It does not delete their underlying sign-in credentials — if they try to log in again they'll land back as "Pending" until re-approved.`,
+  ))) return;
+  await dbRemove(`users/${user.uid}`);
+  toast(`${user.name || user.email} removed`, "warn");
 }

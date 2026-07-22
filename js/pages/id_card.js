@@ -4,10 +4,14 @@
  * Enter an Employee ID → details auto-fill from the database.
  * Upload a passport photo (stays local, never sent to Firebase).
  * Live card preview + one-click Download PNG / Print.
+ *
+ * Card size follows the standard CR80 badge (3.375in × 2.125in / 85.6 × 54mm).
  */
 import { read } from "../lib/store.js";
 import { el, fmtDate } from "../lib/utils.js";
 import { toast } from "../lib/ui.js";
+
+const LOGO_URL = new URL("../../assets/brandix-logo.jpg", import.meta.url).href;
 
 export async function render(root) {
   /* ── State ─────────────────────────────────────────────────────────────── */
@@ -19,6 +23,9 @@ export async function render(root) {
   const nameInput    = el("input", { type: "text",   placeholder: "Auto-filled from ID" });
   const deptInput    = el("input", { type: "text",   placeholder: "Auto-filled from ID" });
   const desigInput   = el("input", { type: "text",   placeholder: "Auto-filled from ID" });
+  const gradeInput   = el("input", { type: "text",   placeholder: "Auto-filled / enter manually" });
+  const dojInput     = el("input", { type: "date",   placeholder: "Auto-filled from ID" });
+  const bloodInput   = el("input", { type: "text",   placeholder: "e.g. O+, A-, AB+" });
   const phoneInput   = el("input", { type: "text",   placeholder: "Auto-filled / enter manually" });
   const unitInput    = el("input", { type: "text",   value: "Unit 3", placeholder: "Unit / Location" });
   const photoInput   = el("input", { type: "file",   accept: "image/*", class: "hidden", id: "idc-photo" });
@@ -49,6 +56,9 @@ export async function render(root) {
         el("label", { class: "field" }, el("span", {}, "Full Name"),         nameInput),
         el("label", { class: "field" }, el("span", {}, "Designation"),       desigInput),
         el("label", { class: "field" }, el("span", {}, "Department"),        deptInput),
+        el("label", { class: "field" }, el("span", {}, "Grade / Category"),  gradeInput),
+        el("label", { class: "field" }, el("span", {}, "Date of Joining"),   dojInput),
+        el("label", { class: "field" }, el("span", {}, "Blood Group"),       bloodInput),
         el("label", { class: "field" }, el("span", {}, "Phone"),             phoneInput),
         el("label", { class: "field" }, el("span", {}, "Unit / Location"),   unitInput),
 
@@ -68,7 +78,7 @@ export async function render(root) {
         el("div", { class: "card" },
           el("div", { class: "card-head" },
             el("h4", {}, "Preview"),
-            el("small", { class: "muted" }, "Updates live as you type")),
+            el("small", { class: "muted" }, "3.375\" × 2.125\" standard card · updates live as you type")),
           el("div", { style: "display:flex; justify-content:center; padding: 20px 0" }, cardEl)))
     )
   );
@@ -78,9 +88,9 @@ export async function render(root) {
     const style = document.createElement("style");
     style.id = "idc-style";
     style.textContent = `
-      /* ID card — credit-card ratio 85.6 × 54 mm → scaled up 3× for screen */
+      /* ID card — true CR80 badge size: 3.375in × 2.125in (85.6 × 54mm) */
       .idc-card {
-        width: 324px; min-height: 204px;
+        width: 3.375in; height: 2.125in;
         background: #fff; border-radius: 10px;
         box-shadow: 0 8px 32px rgba(0,0,0,.28);
         font-family: 'Arial', sans-serif;
@@ -91,25 +101,14 @@ export async function render(root) {
       .idc-header {
         width: 100%; background: #fff;
         display: flex; flex-direction: column; align-items: center;
-        padding: 10px 12px 6px;
+        padding: 8px 12px 5px;
         border-bottom: 3px solid #c8102e;
       }
-      .idc-logo-row {
-        display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
-      }
-      .idc-logo-dot {
-        width: 28px; height: 28px;
-        background: #c8102e; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        font-weight:900; color:#fff; font-size: 14px; letter-spacing:-1px;
-      }
-      .idc-logo-text { line-height: 1.1; }
-      .idc-logo-text .brand  { font-size: 17px; font-weight: 900; color: #222; }
-      .idc-logo-text .sub    { font-size: 9px;  color: #555; letter-spacing: 1px; }
-      .idc-unit { font-size: 8.5px; color: #888; letter-spacing:.5px; margin-top: 1px; }
+      .idc-logo-img { height: 30px; object-fit: contain; }
+      .idc-unit { font-size: 8.5px; color: #888; letter-spacing:.5px; margin-top: 2px; }
       .idc-photo-wrap {
-        margin: 10px 0 8px;
-        width: 88px; height: 108px;
+        margin: 8px 0 6px;
+        width: 80px; height: 96px;
         border: 2px solid #c8102e;
         border-radius: 4px; overflow: hidden;
         background: #f0f0f0;
@@ -118,21 +117,22 @@ export async function render(root) {
       .idc-photo-wrap img { width:100%; height:100%; object-fit:cover; }
       .idc-photo-placeholder { color:#bbb; font-size:32px; }
       .idc-body {
-        width:100%; padding: 0 12px 12px;
+        width:100%; padding: 0 12px 10px;
         display: flex; flex-direction: column; align-items: center; text-align: center;
       }
-      .idc-name       { font-size:14px; font-weight:900; color:#1a1a1a; letter-spacing:.5px; margin-bottom:3px; }
-      .idc-desig      { font-size:10px; font-weight:700; color:#c8102e; margin-bottom:2px; }
-      .idc-dept       { font-size:9.5px; color:#444; margin-bottom:6px; }
+      .idc-name       { font-size:13px; font-weight:900; color:#1a1a1a; letter-spacing:.5px; margin-bottom:2px; }
+      .idc-desig      { font-size:9.5px; font-weight:700; color:#c8102e; margin-bottom:2px; }
+      .idc-dept       { font-size:9px; color:#444; margin-bottom:4px; }
       .idc-id-row     {
         background:#c8102e; color:#fff; border-radius: 12px;
-        padding: 2px 14px; font-size:9px; font-weight:700; letter-spacing:1px;
-        margin-bottom:4px;
+        padding: 2px 14px; font-size:8.5px; font-weight:700; letter-spacing:1px;
+        margin-bottom:3px;
       }
-      .idc-phone      { font-size:9px; color:#555; }
+      .idc-meta-row   { font-size:8px; color:#555; margin-bottom:1px; }
+      .idc-phone      { font-size:8.5px; color:#555; }
       .idc-footer     {
         width:100%; background:#c8102e; color:#fff;
-        text-align:center; font-size:8px; padding: 4px 0; letter-spacing:1px;
+        text-align:center; font-size:7.5px; padding: 3px 0; letter-spacing:1px;
         font-weight:700;
       }
       /* Photo thumb in form */
@@ -144,8 +144,9 @@ export async function render(root) {
         body * { visibility: hidden !important; }
         #idc-preview, #idc-preview * { visibility: visible !important; }
         #idc-preview {
+          /* No scaling — prints at the card's true 3.375in × 2.125in size. */
           position: fixed !important; top:50% !important; left:50% !important;
-          transform: translate(-50%,-50%) scale(2.5) !important;
+          transform: translate(-50%,-50%) !important;
           box-shadow: none !important;
         }
       }
@@ -158,18 +159,20 @@ export async function render(root) {
     const name  = nameInput.value.trim()  || "EMPLOYEE NAME";
     const desig = desigInput.value.trim() || "Designation";
     const dept  = deptInput.value.trim()  || "Department";
+    const grade = gradeInput.value.trim() || "";
+    const doj   = dojInput.value          || "";
+    const blood = bloodInput.value.trim() || "";
     const phone = phoneInput.value.trim() || "";
     const empId = empIdInput.value.trim() || "—";
     const unit  = unitInput.value.trim()  || "Unit 3";
 
+    const meta = [grade && `Grade: ${grade}`, doj && `DOJ: ${fmtDate(doj)}`, blood && `Blood: ${blood}`]
+      .filter(Boolean).join("  ·  ");
+
     cardEl.replaceChildren(
       // ── top header ──────────────────────────────────────────────────
       el("div", { class: "idc-header" },
-        el("div", { class: "idc-logo-row" },
-          el("div", { class: "idc-logo-dot" }, "b"),
-          el("div", { class: "idc-logo-text" },
-            el("div", { class: "brand" }, "brandix"),
-            el("div", { class: "sub"   }, "apparel india"))),
+        el("img", { class: "idc-logo-img", src: LOGO_URL, alt: "Brandix", crossorigin: "anonymous" }),
         el("div", { class: "idc-unit" }, `Brandix ${unit}`)),
 
       // ── photo ────────────────────────────────────────────────────────
@@ -184,6 +187,7 @@ export async function render(root) {
         el("div", { class: "idc-desig" }, desig.toUpperCase()),
         el("div", { class: "idc-dept"  }, dept),
         el("div", { class: "idc-id-row"}, `ID: ${empId}`),
+        meta ? el("div", { class: "idc-meta-row" }, meta) : null,
         phone ? el("div", { class: "idc-phone" }, `📞 ${phone}`) : null),
 
       // ── footer stripe ────────────────────────────────────────────────
@@ -192,7 +196,7 @@ export async function render(root) {
   }
 
   /* ── Wire inputs to refresh card live ───────────────────────────────────── */
-  [empIdInput, nameInput, desigInput, deptInput, phoneInput, unitInput].forEach((inp) =>
+  [empIdInput, nameInput, desigInput, deptInput, gradeInput, dojInput, bloodInput, phoneInput, unitInput].forEach((inp) =>
     inp.addEventListener("input", buildCard));
 
   /* ── Lookup employee from DB ─────────────────────────────────────────────── */
@@ -207,6 +211,8 @@ export async function render(root) {
       nameInput.value  = data.name  || "";
       desigInput.value = data.designation || "";
       deptInput.value  = data.department || "";
+      gradeInput.value = data.grade || data.category || "";
+      dojInput.value   = data.doj || "";
       phoneInput.value = data.phone || "";
       buildCard();
       toast(`Loaded: ${data.name}`, "ok");
@@ -260,7 +266,7 @@ export async function render(root) {
     btn.disabled = true; btn.textContent = "Generating…";
     try {
       const canvas = await html2canvas(cardEl, {
-        scale: 3,
+        scale: 300 / 96, // render at 300 DPI for a true 3.375in × 2.125in print-quality PNG
         backgroundColor: "#ffffff",
         useCORS: true,
         logging: false,
