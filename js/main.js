@@ -4,7 +4,7 @@
 import { isConfigPlaceholder } from "./lib/firebase.js";
 import {
   initAuth, login, register, logout, currentUser, roleLabel, canonicalRole,
-  recheckVerification, resendVerification, recordLogin,
+  recheckVerification, resendVerification, recordLogin, verifyBadge,
 } from "./lib/auth.js";
 import { initTheme, toast, modal } from "./lib/ui.js";
 import { initRouter, route, buildSidebar } from "./router.js";
@@ -35,6 +35,7 @@ initTheme();
 initRouter();
 wireShell();
 wireLogin();
+wireScanId();
 
 if (isConfigPlaceholder) {
   $("loading-screen").classList.add("hidden");
@@ -174,6 +175,98 @@ function wireLogin() {
   });
   $("verify-logout-btn").addEventListener("click", async () => { await logout(); });
   $("pending-logout-btn").addEventListener("click", async () => { await logout(); });
+}
+
+/* ---------------- Scan ID (badge verification, no login needed) ---------------- */
+
+const HTML5_QRCODE_URL = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js";
+
+function wireScanId() {
+  $("scan-id-btn").addEventListener("click", openScanModal);
+}
+
+function loadHtml5Qrcode() {
+  if (window.Html5Qrcode) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = HTML5_QRCODE_URL;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Could not load the QR scanner library"));
+    document.head.appendChild(s);
+  });
+}
+
+async function openScanModal() {
+  let scanner = null;
+  let closed = false;
+
+  const readerDiv = el("div", { id: "qr-reader", style: { width: "100%" } });
+  const resultHost = el("div", { style: { marginTop: "12px" } });
+
+  modal({
+    title: "📷 Scan Employee ID",
+    width: "420px",
+    body: el("div", {},
+      el("p", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
+        "Point the camera at the QR code on the back of an employee's ID card. No sign-in required — this only shows their name, department, designation and status."),
+      readerDiv, resultHost),
+    onClose: async () => {
+      closed = true;
+      if (scanner) { try { await scanner.stop(); scanner.clear(); } catch { /* already stopped */ } }
+    },
+  });
+
+  const showScanning = () => resultHost.replaceChildren(el("p", { class: "muted" }, "Point the camera at a badge's QR code…"));
+  showScanning();
+
+  async function onDecoded(decodedText) {
+    if (closed) return;
+    try { await scanner.pause(true); } catch { /* ignore */ }
+    resultHost.replaceChildren(el("p", { class: "muted" }, `Looking up ${esc(decodedText)}…`));
+    try {
+      const info = await verifyBadge(decodedText);
+      if (closed) return;
+      if (!info) {
+        resultHost.replaceChildren(
+          el("div", { class: "card", style: { padding: "12px", border: "1px solid #f87171" } },
+            el("p", {}, `❌ No employee found with ID "${esc(decodedText)}"`)),
+          el("button", { class: "btn btn-sm", style: { marginTop: "10px" }, onclick: resumeScan }, "Scan Another"));
+        return;
+      }
+      const isActive = (info.status || "active") === "active";
+      resultHost.replaceChildren(
+        el("div", { class: "card", style: { padding: "12px", border: `1px solid ${isActive ? "#34d399" : "#fbbf24"}` } },
+          el("p", {}, isActive ? "✅ Valid Badge" : `⚠️ Badge Found — Status: ${esc(info.status)}`),
+          el("p", {}, el("strong", {}, info.name)),
+          el("p", { class: "muted", style: { fontSize: "13px" } }, `${info.designation} · ${info.department}`),
+          el("p", { class: "muted", style: { fontSize: "12px" } }, `ID: ${esc(info.empId)}`)),
+        el("button", { class: "btn btn-sm", style: { marginTop: "10px" }, onclick: resumeScan }, "Scan Another"));
+    } catch (e) {
+      console.error(e);
+      if (!closed) resultHost.replaceChildren(el("p", { class: "text-bad" }, "Lookup failed: " + (e.message || e)));
+    }
+  }
+
+  function resumeScan() {
+    if (closed) return;
+    showScanning();
+    try { scanner.resume(); } catch { /* ignore */ }
+  }
+
+  try {
+    await loadHtml5Qrcode();
+    if (closed) return;
+    scanner = new window.Html5Qrcode("qr-reader");
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 220 },
+      onDecoded,
+      () => {}, // per-frame decode miss — expected constantly while aiming, ignore
+    );
+  } catch (e) {
+    console.error(e);
+    if (!closed) resultHost.replaceChildren(el("p", { class: "text-bad" }, "Could not start the camera: " + (e.message || e)));
+  }
 }
 
 /* ---------------- Shell chrome ---------------- */

@@ -49,17 +49,19 @@ export const storage = getStorage(app);
 export { isConfigPlaceholder };
 
 /**
- * A lazily-created SECOND Firebase app + auth, used only to create login
- * accounts for other people (guest / staff invites) from an admin session.
- * createUserWithEmailAndPassword() signs in the *calling* auth instance as the
- * new user — doing that on this separate instance leaves the admin's primary
- * session (`auth`) completely untouched.
+ * A lazily-created SECOND Firebase app, used for auth/db operations that
+ * must not touch the primary session — creating login accounts for other
+ * people (guest / staff invites) from an admin session, and the anonymous
+ * badge-scan lookup from the login screen (which must not trigger the main
+ * app's onAuthStateChanged as if a real sign-in happened).
  */
-let _secondaryAuth = null;
-export function secondaryAuth() {
-  if (!_secondaryAuth) _secondaryAuth = getAuth(initializeApp(firebaseConfig, "account-creator"));
-  return _secondaryAuth;
+let _secondaryApp = null;
+function secondaryApp() {
+  if (!_secondaryApp) _secondaryApp = initializeApp(firebaseConfig, "account-creator");
+  return _secondaryApp;
 }
+export function secondaryAuth() { return getAuth(secondaryApp()); }
+export function secondaryDb() { return getDatabase(secondaryApp()); }
 
 /** Firebase Analytics is optional — it fails on unsupported origins (e.g. file://). */
 export let analytics = null;

@@ -17,7 +17,8 @@
 import {
   auth, onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, updateProfile,
-  sendEmailVerification, secondaryAuth, track,
+  sendEmailVerification, secondaryAuth, secondaryDb, signInAnonymously,
+  get, ref, track,
 } from "./firebase.js";
 import { read, dbSet, dbUpdate, watch } from "./store.js";
 
@@ -192,6 +193,36 @@ export async function createGuestAccount({ email, password, name = "", role = "m
   await dbUpdate(`users/${uid}`, profile);
   await signOut(secondaryAuth()).catch(() => {});
   return uid;
+}
+
+/**
+ * Look up an employee by ID WITHOUT signing in to the app — used by the
+ * "Scan ID" badge verification on the login screen (gate/security use, no
+ * app access implied). Signs in anonymously on the SECONDARY app so this
+ * never touches the main session or triggers initAuth's onAuthStateChanged.
+ * Only the fields the database rules expose to anonymous readers come back.
+ * @returns {object|null} {empId, name, department, designation, status} or null if not found
+ */
+export async function verifyBadge(empId) {
+  const id = String(empId || "").trim();
+  if (!id) return null;
+  const db2 = secondaryDb();
+  try {
+    await signInAnonymously(secondaryAuth());
+    const [name, department, designation, status] = await Promise.all(
+      ["name", "department", "designation", "status"].map((f) => get(ref(db2, `employees/${id}/${f}`)))
+    );
+    if (!name.exists()) return null;
+    return {
+      empId: id,
+      name: name.val(),
+      department: department.val() || "—",
+      designation: designation.val() || "—",
+      status: status.val() || "active",
+    };
+  } finally {
+    await signOut(secondaryAuth()).catch(() => {});
+  }
 }
 
 /** Re-check whether the signed-in user has clicked their email verification link yet. */

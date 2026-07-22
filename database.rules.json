@@ -24,39 +24,41 @@
       ".write": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)",
       "$empId": {
         "name": { ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')" },
-        "department": { ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')" }
+        "department": { ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')" },
+        "designation": { ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')" },
+        "status": { ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')" }
       }
     },
 
     "attendance": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor|dept_manager|manager)$/)"
     },
 
     "budget": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
     "budgetAliases": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
     "attrition": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "employeeRecords": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "leaves": {
       ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       "$empId": {
-        ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+        ".read": "auth != null && (auth.token.firebase.sign_in_provider === 'anonymous' || root.child('users').child(auth.uid).child('role').val() !== 'pending')",
         "$id": {
           ".write": "auth != null && ((auth.token.firebase.sign_in_provider === 'anonymous' && !data.exists() && newData.child('empId').val() === $empId && newData.child('status').val() === 'pending' && newData.hasChildren(['empId','name','department','type','from','to','days','status','appliedAt'])) || (auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor|dept_manager|manager)$/)))"
         }
@@ -64,32 +66,32 @@
     },
 
     "vacancies": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "recruitment": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "settings": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin)$/)"
     },
 
     "emailAutomation": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "emailLogs": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
     "uploads": {
-      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
+      ".read": "auth != null && auth.token.firebase.sign_in_provider !== 'anonymous' && root.child('users').child(auth.uid).child('role').val() !== 'pending'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val().matches(/^(hr_admin|superadmin|admin|hr_executive|editor)$/)"
     },
 
